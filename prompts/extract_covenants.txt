@@ -1,0 +1,2 @@
+# TODO: Prompt for extracting financial covenants and quantity definitions from contract text.
+

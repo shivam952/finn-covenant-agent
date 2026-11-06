@@ -1,0 +1,2 @@
+# TODO: Prompt for generating the German executive summary of the covenant check.
+
