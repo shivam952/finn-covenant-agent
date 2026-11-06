@@ -11,18 +11,18 @@
     "Vertrag_1_Sparkasse_Investitionsdarlehen.pdf": {"has_covenants": false},
     "Vertrag_2_Foerderbank_Foerderdarlehen.pdf": {"has_covenants": true, "covenants": {
       "Wirtschaftliche Eigenkapitalquote": {"numerator": 107500, "denominator": 313200,
-        "value_raw": 34.3231, "value_reported": 34.3231, "limit": 27.5, "operator": ">=",
+        "value_raw": 34.3231, "value_reported": 34.3231, "limit": 27.5, "operator": ">=", "unit": "percent",
         "headroom": 6.8231, "met": true, "stress_equity_loss_teur": 29475.86}}},
     "Vertrag_3_Landesbank_Investitionsdarlehen.pdf": {"has_covenants": true, "covenants": {
       "Schuldendienstdeckungsgrad": {"numerator": 37000, "denominator": 23680,
-        "value_raw": 1.5625, "value_reported": 1.56, "limit": 1.30, "operator": ">=",
+        "value_raw": 1.5625, "value_reported": 1.56, "limit": 1.30, "operator": ">=", "unit": "ratio",
         "headroom": 0.26, "met": true, "stress_ebitda_drop_pct": 15.46}}},
     "Vertrag_4_Konsortialkredit.pdf": {"has_covenants": true, "covenants": {
       "Eigenkapitalquote": {"numerator": 96100, "denominator": 313200,
-        "value_raw": 30.6833, "value_reported": 30.7, "limit": 30.0, "operator": ">=",
+        "value_raw": 30.6833, "value_reported": 30.7, "limit": 30.0, "operator": ">=", "unit": "percent",
         "headroom": 0.7, "met": true, "stress_equity_loss_teur": 3057.14},
       "Dynamischer Verschuldungsgrad": {"numerator": 135600, "denominator": 40200,
-        "value_raw": 3.3731, "value_reported": 3.37, "limit": 3.50, "operator": "<=",
+        "value_raw": 3.3731, "value_reported": 3.37, "limit": 3.50, "operator": "<=", "unit": "ratio",
         "headroom": 0.13, "met": true, "stress_ebitda_drop_pct": 3.62}}}
   },
   "trap_values_that_must_NOT_appear": {
@@ -31,4 +31,3 @@
     "ekq_v4_with_sonderposten": 37.96
   }
 }
-

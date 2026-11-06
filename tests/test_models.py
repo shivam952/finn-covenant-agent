@@ -38,7 +38,9 @@ def test_expected_2027_loads_and_ratios_match() -> None:
             numerator = float(cov["numerator"])
             denominator = float(cov["denominator"])
             value_raw = float(cov["value_raw"])
-            scale = 100.0 if "quote" in cov_name.lower() else 1.0
+            unit = cov["unit"]
+            assert unit in ("percent", "ratio")
+            scale = 100.0 if unit == "percent" else 1.0
             computed = (numerator / denominator) * scale
             assert computed == pytest.approx(value_raw, rel=1e-3), (
                 f"Mismatch for {contract_name} / {cov_name}: {computed} != {value_raw}"
@@ -107,12 +109,31 @@ def test_settings_loads_without_crashing_on_missing_env(monkeypatch: pytest.Monk
     """config.py does not crash when LLM or mail variables are unset, and raises only when required."""
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     monkeypatch.delenv("OPENROUTER_MODEL", raising=False)
+    monkeypatch.delenv("FINN_MAIL_ADDRESS", raising=False)
     monkeypatch.delenv("MAIL_USER", raising=False)
     monkeypatch.delenv("MAIL_APP_PASSWORD", raising=False)
 
-    settings = Settings.from_env()
+    settings = Settings.from_env(load_env_file=False)
     with pytest.raises(ValueError, match="OPENROUTER_API_KEY"):
         settings.require_llm()
     with pytest.raises(ValueError, match="MAIL_USER"):
         settings.require_mail()
 
+
+def test_settings_treats_hash_comment_as_empty_and_defaults_finn_mail(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Values starting with '#' are treated as empty; FINN_MAIL_ADDRESS defaults to MAIL_USER."""
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test-key")
+    monkeypatch.setenv("OPENROUTER_MODEL", "# inline comment that should be ignored")
+    monkeypatch.delenv("FINN_MAIL_ADDRESS", raising=False)
+    monkeypatch.setenv("MAIL_USER", "finn.bot@gmail.com")
+    monkeypatch.setenv("MAIL_APP_PASSWORD", "app-secret")
+
+    settings = Settings.from_env(load_env_file=False)
+    assert settings.openrouter_model == ""
+    assert settings.finn_mail_address == "finn.bot@gmail.com"
+    settings.require_mail()
+
+    with pytest.raises(ValueError, match="OPENROUTER_MODEL"):
+        settings.require_llm()

@@ -9,6 +9,14 @@ from dotenv import load_dotenv
 from pydantic import BaseModel, ConfigDict
 
 
+def _clean_env(name: str, default: str = "") -> str:
+    """Read an environment variable, strip whitespace, and treat values starting with '#' as empty."""
+    raw = os.getenv(name, "").strip()
+    if raw.startswith("#"):
+        return default
+    return raw or default
+
+
 class Settings(BaseModel):
     """Application settings loaded from environment variables."""
 
@@ -30,24 +38,34 @@ class Settings(BaseModel):
     runs_dir: Path = Path("runs")
 
     @classmethod
-    def from_env(cls, env_file: str | Path | None = None) -> Settings:
-        """Load .env (if present) and construct frozen Settings without crashing on missing keys."""
-        load_dotenv(dotenv_path=env_file, override=False)
+    def from_env(
+        cls,
+        env_file: str | Path | None = None,
+        *,
+        load_env_file: bool = True,
+    ) -> Settings:
+        """Load .env (if requested) and construct frozen Settings without crashing on missing keys."""
+        if load_env_file:
+            load_dotenv(dotenv_path=env_file, override=False)
+
+        mail_user = _clean_env("MAIL_USER")
+        finn_mail_address = _clean_env("FINN_MAIL_ADDRESS") or mail_user
+
         return cls(
-            openrouter_api_key=os.getenv("OPENROUTER_API_KEY", "").strip(),
-            openrouter_model=os.getenv("OPENROUTER_MODEL", "").strip(),
-            openrouter_model_fallback=os.getenv("OPENROUTER_MODEL_FALLBACK", "").strip(),
-            finn_mail_address=os.getenv("FINN_MAIL_ADDRESS", "").strip(),
-            imap_host=os.getenv("IMAP_HOST", "imap.gmail.com").strip() or "imap.gmail.com",
-            imap_port=int(os.getenv("IMAP_PORT", "993") or 993),
-            smtp_host=os.getenv("SMTP_HOST", "smtp.gmail.com").strip() or "smtp.gmail.com",
-            smtp_port=int(os.getenv("SMTP_PORT", "465") or 465),
-            mail_user=os.getenv("MAIL_USER", "").strip(),
-            mail_app_password=os.getenv("MAIL_APP_PASSWORD", "").strip(),
-            poll_seconds=int(os.getenv("POLL_SECONDS", "20") or 20),
-            contracts_dir=Path(os.getenv("CONTRACTS_DIR", "data/contracts") or "data/contracts"),
-            cache_dir=Path(os.getenv("CACHE_DIR", "cache") or "cache"),
-            runs_dir=Path(os.getenv("RUNS_DIR", "runs") or "runs"),
+            openrouter_api_key=_clean_env("OPENROUTER_API_KEY"),
+            openrouter_model=_clean_env("OPENROUTER_MODEL"),
+            openrouter_model_fallback=_clean_env("OPENROUTER_MODEL_FALLBACK"),
+            finn_mail_address=finn_mail_address,
+            imap_host=_clean_env("IMAP_HOST", "imap.gmail.com"),
+            imap_port=int(_clean_env("IMAP_PORT", "993")),
+            smtp_host=_clean_env("SMTP_HOST", "smtp.gmail.com"),
+            smtp_port=int(_clean_env("SMTP_PORT", "465")),
+            mail_user=mail_user,
+            mail_app_password=_clean_env("MAIL_APP_PASSWORD"),
+            poll_seconds=int(_clean_env("POLL_SECONDS", "20")),
+            contracts_dir=Path(_clean_env("CONTRACTS_DIR", "data/contracts")),
+            cache_dir=Path(_clean_env("CACHE_DIR", "cache")),
+            runs_dir=Path(_clean_env("RUNS_DIR", "runs")),
         )
 
     def require_llm(self) -> None:
@@ -73,13 +91,18 @@ class Settings(BaseModel):
             missing.append("MAIL_USER")
         if not self.mail_app_password:
             missing.append("MAIL_APP_PASSWORD")
+        if not self.finn_mail_address:
+            missing.append("FINN_MAIL_ADDRESS")
         if missing:
             raise ValueError(
                 f"Missing required mail environment variables: {', '.join(missing)}"
             )
 
 
-def load_settings(env_file: str | Path | None = None) -> Settings:
+def load_settings(
+    env_file: str | Path | None = None,
+    *,
+    load_env_file: bool = True,
+) -> Settings:
     """Convenience function to load application settings."""
-    return Settings.from_env(env_file=env_file)
-
+    return Settings.from_env(env_file=env_file, load_env_file=load_env_file)
