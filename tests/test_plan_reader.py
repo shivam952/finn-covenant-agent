@@ -38,9 +38,23 @@ def test_reads_sample_values_and_plausibility_checks() -> None:
     # All 4 plausibility checks pass
     assert plan.checks == []
 
-    catalog = plan_item_catalog(plan)
-    assert "GuV!D18 | Jahresüberschuss | 10.700" in catalog
-    assert "Bilanz!D15 | Summe Aktiva (Bilanzsumme) | 313.200" in catalog
+    # Formula totals have is_total=True and transitive depends_on
+    assert plan.items["Bilanz!D22"].is_total is True
+    assert "Bilanz!D18" in plan.items["Bilanz!D22"].depends_on
+    assert plan.items["Bilanz!D15"].is_total is True
+    assert "Bilanz!D5" in plan.items["Bilanz!D15"].depends_on
+    assert plan.items["GuV!D17"].is_total is False
+    assert plan.items["GuV!D17"].depends_on == []
+
+    # Default catalog has no values and marks totals with [Summe]
+    catalog_no_vals = plan_item_catalog(plan)
+    assert "GuV!D18 | GuV | Jahresüberschuss | [Summe]" in catalog_no_vals
+    assert "313.200" not in catalog_no_vals
+
+    # Catalog with include_values=True includes values
+    catalog_with_vals = plan_item_catalog(plan, include_values=True)
+    assert "GuV!D18 | GuV | Jahresüberschuss | 10.700 | [Summe]" in catalog_with_vals
+    assert "Bilanz!D15 | Bilanz | Summe Aktiva (Bilanzsumme) | 313.200 | [Summe]" in catalog_with_vals
 
 
 def test_no_cache_workbook_evaluates_formulas_from_scratch(tmp_path: Path) -> None:

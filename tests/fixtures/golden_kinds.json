@@ -1,0 +1,18 @@
+{
+  "Vertrag_2_Foerderbank_Foerderdarlehen.pdf": {
+    "Wirtschaftliches Eigenkapital": "equity",
+    "Bilanzsumme": "total_assets"
+  },
+  "Vertrag_3_Landesbank_Investitionsdarlehen.pdf": {
+    "EBITDA": "earnings",
+    "Ertragsteuern": "taxes",
+    "EBITDA abzüglich Ertragsteuern": "other",
+    "Schuldendienst": "debt_service"
+  },
+  "Vertrag_4_Konsortialkredit.pdf": {
+    "Eigenkapital": "equity",
+    "Bilanzsumme": "total_assets",
+    "EBITDA": "earnings",
+    "Nettofinanzverbindlichkeiten": "debt"
+  }
+}

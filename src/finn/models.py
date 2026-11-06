@@ -99,6 +99,8 @@ class PlanItem(BaseModel):
     raw_value: float             # as stored in Excel (expenses are negative there)
     value: float                 # normalised: expense input lines as positive amounts, totals keep their sign
     is_expense: bool
+    is_total: bool = False       # True if the cell is a formula in Excel
+    depends_on: list[str] = []   # all PlanItem ids the formula depends on, transitively
 
 
 class TermMapping(BaseModel):

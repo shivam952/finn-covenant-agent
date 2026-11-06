@@ -104,6 +104,7 @@ class _WorkbookEvaluator:
         self.sheets_v = sheets_v
         self.canonical_map = canonical_map
         self.memo: dict[tuple[str, str], float] = {}
+        self.direct_deps: dict[tuple[str, str], list[tuple[str, str]]] = {}
         self.checked_cache: set[tuple[str, str]] = set()
         self.warnings: list[str] = []
 
@@ -136,12 +137,14 @@ class _WorkbookEvaluator:
         cached = ws_v[coord_up].value
 
         if raw is None:
+            self.direct_deps[key] = []
             return 0.0
         if isinstance(raw, bool):
             raise PlanFormatError(f"Ungültiger Wahrheitswert in Zelle {sheet}!{coord_up}.")
         if isinstance(raw, (int, float)):
             val = float(raw)
             self.memo[key] = val
+            self.direct_deps[key] = []
             return val
         if not isinstance(raw, str):
             raise PlanFormatError(
@@ -163,8 +166,13 @@ class _WorkbookEvaluator:
             )
 
         total = 0.0
+        deps: list[tuple[str, str]] = []
         for sign, term_str in terms:
-            total += sign * self._eval_term(sheet, coord_up, term_str, next_visiting)
+            t_val, t_deps = self._eval_term(sheet, coord_up, term_str, next_visiting)
+            total += sign * t_val
+            deps.extend(t_deps)
+
+        self.direct_deps[key] = deps
 
         if (
             key not in self.checked_cache
@@ -189,7 +197,7 @@ class _WorkbookEvaluator:
         coord: str,
         term: str,
         visiting: frozenset[tuple[str, str]],
-    ) -> float:
+    ) -> tuple[float, list[tuple[str, str]]]:
         origin = f"{sheet}!{coord}"
         m_sum = _SUM_RE.match(term)
         if m_sum:
@@ -208,6 +216,7 @@ class _WorkbookEvaluator:
                     f"Ungültiger Bereich in SUM-Formel in {origin}: ={term}"
                 )
             acc = 0.0
+            deps: list[tuple[str, str]] = []
             for r in range(row1, row2 + 1):
                 for c in range(col1, col2 + 1):
                     c_coord = f"{get_column_letter(c)}{r}"
@@ -215,7 +224,8 @@ class _WorkbookEvaluator:
                     if cell_val is None:
                         continue
                     acc += self.eval_cell(target_sheet, c_coord, visiting)
-            return acc
+                    deps.append((target_sheet, c_coord))
+            return acc, deps
 
         m_ref = _CELL_REF_RE.match(term)
         if m_ref:
@@ -226,12 +236,37 @@ class _WorkbookEvaluator:
                 else sheet
             )
             target_coord = f"{m_ref.group('col').upper()}{int(m_ref.group('row'))}"
-            return self.eval_cell(target_sheet, target_coord, visiting)
+            val = self.eval_cell(target_sheet, target_coord, visiting)
+            return val, [(target_sheet, target_coord)]
 
         if _NUMBER_RE.match(term):
-            return float(term)
+            return float(term), []
 
         raise PlanFormatError(f"Nicht unterstützte Formel in {origin}: ={term}")
+
+    def transitive_dependencies(
+        self,
+        sheet: str,
+        coord: str,
+        known_item_ids: set[str],
+    ) -> list[str]:
+        """Return all transitive PlanItem IDs that (sheet, coord) depends on."""
+        start_key = (sheet, coord.upper())
+        visited: set[tuple[str, str]] = set()
+        ordered: list[str] = []
+
+        def _walk(curr: tuple[str, str]) -> None:
+            for dep in self.direct_deps.get(curr, []):
+                if dep in visited:
+                    continue
+                visited.add(dep)
+                dep_id = f"{dep[0]}!{dep[1]}"
+                if dep_id in known_item_ids:
+                    ordered.append(dep_id)
+                _walk(dep)
+
+        _walk(start_key)
+        return ordered
 
 
 def _find_plan_column(ws: Worksheet, sheet_label: str, mode: str) -> tuple[int, int, str]:
@@ -429,6 +464,7 @@ def read_plan(path: Path) -> PlanData:
             raw_value=raw_value,
             value=norm_value,
             is_expense=is_expense,
+            is_total=is_formula,
         )
 
     # 2. Bilanz
@@ -444,6 +480,7 @@ def read_plan(path: Path) -> PlanData:
             continue
         coord = f"{bil_col_letter}{r}"
         raw_value = evaluator.eval_cell("Bilanz", coord)
+        is_formula = isinstance(cell_val, str) and cell_val.strip().startswith("=")
         item_id = f"Bilanz!{coord}"
         items[item_id] = PlanItem(
             id=item_id,
@@ -453,6 +490,7 @@ def read_plan(path: Path) -> PlanData:
             raw_value=raw_value,
             value=raw_value,
             is_expense=False,
+            is_total=is_formula,
         )
 
     # 3. Finanzierung
@@ -469,6 +507,7 @@ def read_plan(path: Path) -> PlanData:
                 continue
             coord = f"{get_column_letter(c)}{r}"
             raw_value = evaluator.eval_cell("Finanzierung", coord)
+            is_formula = isinstance(cell_val, str) and cell_val.strip().startswith("=")
             item_id = f"Finanzierung!{coord}"
             items[item_id] = PlanItem(
                 id=item_id,
@@ -478,7 +517,15 @@ def read_plan(path: Path) -> PlanData:
                 raw_value=raw_value,
                 value=raw_value,
                 is_expense=False,
+                is_total=is_formula,
             )
+
+    # Populate transitive depends_on for all formula PlanItems
+    known_ids = set(items.keys())
+    for item_id, item in list(items.items()):
+        if item.is_total:
+            deps = evaluator.transitive_dependencies(item.sheet, item.cell, known_ids)
+            items[item_id] = item.model_copy(update={"depends_on": deps})
 
     checks = list(evaluator.warnings)
     _run_plausibility_checks(items, checks)
@@ -488,16 +535,40 @@ def read_plan(path: Path) -> PlanData:
         "guv_plan_column": f"{guv_col_letter} ({guv_header})",
         "bilanz_plan_column": f"{bil_col_letter} ({bil_header})",
         "finanzierung_columns": [f"{get_column_letter(c)} ({h})" for c, h in fin_headers],
+        "sheet_headers": {
+            "GuV": f"GuV – Spalte {guv_header} (Spalte {guv_col_letter})",
+            "Bilanz": f"Bilanz – Spalte {bil_header} (Spalte {bil_col_letter})",
+            "Finanzierung": "Finanzierung – Darlehensspiegel 2027 (Spalten "
+            + ", ".join(f"{get_column_letter(c)}: {h}" for c, h in fin_headers)
+            + ")",
+        },
         "item_count": len(items),
     }
 
     return PlanData(items=items, checks=checks, meta=meta)
 
 
-def plan_item_catalog(plan: PlanData) -> str:
-    """Format all PlanItems as 'id | label | value' lines for prompts and audit logs."""
-    lines: list[str] = []
+def plan_item_catalog(plan: PlanData, include_values: bool = False) -> str:
+    """Format PlanItems grouped by sheet. Default omits numeric values so LLM maps by meaning only."""
+    sheet_headers: dict[str, str] = plan.meta.get("sheet_headers", {})
+    by_sheet: dict[str, list[PlanItem]] = {}
     for item in plan.items.values():
-        val_str = fmt_num(item.value, 0 if float(item.value).is_integer() else 2)
-        lines.append(f"{item.id} | {item.label} | {val_str}")
-    return "\n".join(lines)
+        by_sheet.setdefault(item.sheet, []).append(item)
+
+    blocks: list[str] = []
+    for sheet, sheet_items in by_sheet.items():
+        header = sheet_headers.get(sheet, f"{sheet} – Spalte Plan 2027")
+        lines: list[str] = [f"=== {header} ==="]
+        for item in sheet_items:
+            parts = [item.id, item.sheet, item.label]
+            if include_values:
+                val_str = fmt_num(
+                    item.value, 0 if float(item.value).is_integer() else 2
+                )
+                parts.append(val_str)
+            if item.is_total:
+                parts.append("[Summe]")
+            lines.append(" | ".join(parts))
+        blocks.append("\n".join(lines))
+
+    return "\n\n".join(blocks)

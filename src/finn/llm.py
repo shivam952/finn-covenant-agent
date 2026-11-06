@@ -241,3 +241,8 @@ class LLMClient:
         raise LLMError(
             f"LLM structured completion failed for '{purpose}' after {total_attempts} attempts: {last_error}"
         )
+
+
+def make_llm(settings: Settings) -> JsonLLM:
+    """Factory function to create an LLMClient (can be monkeypatched in tests)."""
+    return LLMClient(settings)
