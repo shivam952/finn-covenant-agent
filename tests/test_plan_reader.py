@@ -80,3 +80,4 @@ def test_renamed_plan_2027_header_raises_plan_format_error(tmp_path: Path) -> No
 
     with pytest.raises(PlanFormatError, match="Plan 2027"):
         read_plan(copy_path)
+

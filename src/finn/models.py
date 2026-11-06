@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Literal
+import copy
+from typing import Any, Literal
 
 from pydantic import BaseModel, model_validator
 
@@ -11,6 +12,8 @@ class Source(BaseModel):
     page: int                    # PDF page number, 1-based
     section: str                 # e.g. "§ 13 Abs. 1", "§ 1 Abs. 1", "Anlage 3 Abs. 6"
     quote: str                   # contract text word for word (short, the defining sentence)
+    verified: bool | None = None
+    verify_note: str | None = None
 
 
 class Component(BaseModel):
@@ -131,3 +134,32 @@ class RunReport(BaseModel):
     results: list[Result]
     contracts_without_covenants: list[ContractCovenants]
     warnings: list[str]
+
+
+_CODE_ONLY_SOURCE_FIELDS = ("verified", "verify_note")
+
+
+def _strip_code_only_fields(node: Any) -> None:
+    """Recursively strip code-only Source fields ('verified', 'verify_note') from a JSON schema dict."""
+    if isinstance(node, dict):
+        props = node.get("properties")
+        if isinstance(props, dict) and "quote" in props and "page" in props:
+            for field_name in _CODE_ONLY_SOURCE_FIELDS:
+                props.pop(field_name, None)
+            req = node.get("required")
+            if isinstance(req, list):
+                for field_name in _CODE_ONLY_SOURCE_FIELDS:
+                    if field_name in req:
+                        req.remove(field_name)
+        for val in node.values():
+            _strip_code_only_fields(val)
+    elif isinstance(node, list):
+        for item in node:
+            _strip_code_only_fields(item)
+
+
+def build_llm_json_schema(schema: type[BaseModel]) -> dict[str, Any]:
+    """Generate a JSON schema for LLM structured output with code-only fields excluded."""
+    raw_schema = copy.deepcopy(schema.model_json_schema())
+    _strip_code_only_fields(raw_schema)
+    return raw_schema

@@ -433,6 +433,14 @@ def evaluate_contract(
         )
         plan_cells = _dedup_preserve(num_eval.plan_cells + den_eval.plan_cells)
 
+        cov_warnings: list[str] = []
+        for s in contract_sources:
+            if s.verified is False:
+                note = s.verify_note or "Zitat nicht verifiziert"
+                cov_warnings.append(f"{s.section} (S. {s.page}): {note}")
+            elif s.verify_note:
+                cov_warnings.append(f"{s.section}: {s.verify_note}")
+
         results.append(
             Result(
                 contract_label=contract.contract_label,
@@ -452,7 +460,7 @@ def evaluate_contract(
                 formula_text=formula_text,
                 contract_sources=contract_sources,
                 plan_cells=plan_cells,
-                warnings=list(plan.checks),
+                warnings=cov_warnings,
             )
         )
 

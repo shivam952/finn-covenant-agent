@@ -149,9 +149,10 @@ def test_headroom_sign_for_both_operators() -> None:
 
 
 def test_kaufmaennisch_rounding() -> None:
-    """Round half up (kaufmännisch) rounds 1.565 -> 1.57 and 30.65 -> 30.7."""
+    """Round half up (kaufmännisch) rounds 1.565 -> 1.57, 30.65 -> 30.7, and strips float noise."""
     assert round_kaufmaennisch(1.565, 2) == 1.57
     assert round_kaufmaennisch(30.65, 1) == 30.7
+    assert round_kaufmaennisch(30.649999999999999, 1) == 30.7
 
 
 def test_changed_numbers_in_workbook(tmp_path: Path) -> None:
@@ -202,6 +203,9 @@ def test_changed_numbers_in_workbook(tmp_path: Path) -> None:
     assert v4_res_3["V4-DYNVG"].value_raw == pytest.approx(expected_dynvg_raw, abs=1e-9)
     # Bilanz total Passiva is a formula and must have been recomputed (+1000 + 5000 = +6000)
     assert plan_3.items["Bilanz!D34"].value == pytest.approx(313200.0 + 6000.0)
+    assert len(plan_3.checks) > 0
+    # Plan plausibility warnings belong in RunReport.warnings, not copied into Result.warnings
+    assert v4_res_3["V4-DYNVG"].warnings == []
 
 
 def test_missing_mapping_and_cyclic_ref_raise_calc_error() -> None:
@@ -251,3 +255,4 @@ def test_missing_mapping_and_cyclic_ref_raise_calc_error() -> None:
     )
     with pytest.raises(CalcError, match="Zyklische Referenz"):
         evaluate_contract(cyclic_contract, [], plan)
+
