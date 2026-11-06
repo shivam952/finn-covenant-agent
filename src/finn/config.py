@@ -25,6 +25,9 @@ class Settings(BaseModel):
     openrouter_api_key: str = ""
     openrouter_model: str = ""
     openrouter_model_fallback: str = ""
+    app_url: str = ""
+    llm_time_budget_s: float = 180.0
+    llm_max_tokens: int = 12000
     finn_mail_address: str = ""
     imap_host: str = "imap.gmail.com"
     imap_port: int = 993
@@ -55,6 +58,9 @@ class Settings(BaseModel):
             openrouter_api_key=_clean_env("OPENROUTER_API_KEY"),
             openrouter_model=_clean_env("OPENROUTER_MODEL"),
             openrouter_model_fallback=_clean_env("OPENROUTER_MODEL_FALLBACK"),
+            app_url=_clean_env("APP_URL"),
+            llm_time_budget_s=float(_clean_env("LLM_TIME_BUDGET_S", "180")),
+            llm_max_tokens=int(_clean_env("LLM_MAX_TOKENS", "12000")),
             finn_mail_address=finn_mail_address,
             imap_host=_clean_env("IMAP_HOST", "imap.gmail.com"),
             imap_port=int(_clean_env("IMAP_PORT", "993")),

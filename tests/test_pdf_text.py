@@ -38,3 +38,4 @@ def test_extract_pages_and_markers_on_all_four_contracts() -> None:
     v2_pages = {p.page: p.text for p in extract_pages(CONTRACTS_DIR / v2.contract_file)}
     cov_src = v2.covenants[0].source
     assert cov_src.quote in v2_pages[cov_src.page]
+

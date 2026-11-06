@@ -27,6 +27,7 @@ _QUOTE_TRANSLATION = str.maketrans(
     }
 )
 _WHITESPACE_RE = re.compile(r"\s+")
+_HYPHENATION_NOTE = "Abgleich ohne Satzzeichen/Trennstriche"
 
 
 def normalize(s: str) -> str:
@@ -35,6 +36,11 @@ def normalize(s: str) -> str:
     translated = nfkc.translate(_QUOTE_TRANSLATION)
     collapsed = _WHITESPACE_RE.sub(" ", translated).strip()
     return collapsed.casefold()
+
+
+def _alnum_only(norm_s: str) -> str:
+    """Keep only letters and digits from an already normalized string (for line-break hyphenation tolerance)."""
+    return "".join(ch for ch in norm_s if ch.isalnum())
 
 
 def verify_source(source: Source, pages: list[PageText]) -> Source:
@@ -48,21 +54,34 @@ def verify_source(source: Source, pages: list[PageText]) -> Source:
             }
         )
 
+    alnum_quote = _alnum_only(norm_quote)
     page_map = {p.page: normalize(p.text) for p in pages}
+    alnum_map = {p_num: _alnum_only(txt) for p_num, txt in page_map.items()}
     sorted_page_nums = sorted(page_map.keys())
 
-    # a) Check cited page
+    # a) Check cited page (normal, then alnum-only)
     cited_text = page_map.get(source.page)
-    if cited_text is not None and norm_quote in cited_text:
-        return source.model_copy(update={"verified": True, "verify_note": None})
+    if cited_text is not None:
+        if norm_quote in cited_text:
+            return source.model_copy(update={"verified": True, "verify_note": None})
+        if alnum_quote and alnum_quote in alnum_map[source.page]:
+            return source.model_copy(
+                update={"verified": True, "verify_note": _HYPHENATION_NOTE}
+            )
 
-    # c) Check cited page + next page joined (page break wrap)
+    # c) Check cited page + next page joined (normal, then alnum-only)
     next_text = page_map.get(source.page + 1)
     if cited_text is not None and next_text is not None:
         if norm_quote in f"{cited_text} {next_text}":
             return source.model_copy(update={"verified": True, "verify_note": None})
+        if alnum_quote and alnum_quote in (
+            alnum_map[source.page] + alnum_map[source.page + 1]
+        ):
+            return source.model_copy(
+                update={"verified": True, "verify_note": _HYPHENATION_NOTE}
+            )
 
-    # b) Check all other single pages
+    # b) Check all other single pages (normal first, then alnum-only)
     other_single_matches = [
         p_num
         for p_num in sorted_page_nums
@@ -78,7 +97,23 @@ def verify_source(source: Source, pages: list[PageText]) -> Source:
             }
         )
 
-    # Also check other page-break pairs if not found on single pages
+    if len(other_single_matches) == 0 and alnum_quote:
+        other_alnum_matches = [
+            p_num
+            for p_num in sorted_page_nums
+            if p_num != source.page and alnum_quote in alnum_map[p_num]
+        ]
+        if len(other_alnum_matches) == 1:
+            found_page = other_alnum_matches[0]
+            return source.model_copy(
+                update={
+                    "page": found_page,
+                    "verified": True,
+                    "verify_note": f"Seitenangabe korrigiert: S. {found_page} statt S. {source.page} ({_HYPHENATION_NOTE})",
+                }
+            )
+
+    # Check other page-break pairs (normal first, then alnum-only)
     if len(other_single_matches) == 0:
         other_pair_matches = [
             p_num
@@ -96,6 +131,23 @@ def verify_source(source: Source, pages: list[PageText]) -> Source:
                     "verify_note": f"Seitenangabe korrigiert: S. {found_page} statt S. {source.page}",
                 }
             )
+        if len(other_pair_matches) == 0 and alnum_quote:
+            other_pair_alnum = [
+                p_num
+                for p_num in sorted_page_nums
+                if p_num != source.page
+                and (p_num + 1) in alnum_map
+                and alnum_quote in (alnum_map[p_num] + alnum_map[p_num + 1])
+            ]
+            if len(other_pair_alnum) == 1:
+                found_page = other_pair_alnum[0]
+                return source.model_copy(
+                    update={
+                        "page": found_page,
+                        "verified": True,
+                        "verify_note": f"Seitenangabe korrigiert: S. {found_page} statt S. {source.page} ({_HYPHENATION_NOTE})",
+                    }
+                )
 
     # d) Not found (or ambiguous across multiple non-cited pages)
     return source.model_copy(

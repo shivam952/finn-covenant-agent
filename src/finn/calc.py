@@ -438,7 +438,7 @@ def evaluate_contract(
             if s.verified is False:
                 note = s.verify_note or "Zitat nicht verifiziert"
                 cov_warnings.append(f"{s.section} (S. {s.page}): {note}")
-            elif s.verify_note:
+            elif s.verify_note and s.verify_note.startswith("Seitenangabe korrigiert"):
                 cov_warnings.append(f"{s.section}: {s.verify_note}")
 
         results.append(

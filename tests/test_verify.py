@@ -82,3 +82,33 @@ def test_tampered_quote_wrong_page_and_typographic_quotes() -> None:
     res_ascii = verify_source(ascii_quotes, pages)
     assert res_ascii.verified is True
     assert res_ascii.verify_note is None
+
+
+def test_hyphenation_tolerant_quote_verification_on_contract_3_page_2() -> None:
+    """Quote 'Bilanzierungs- und Bewertungsmethoden' verifies against contract 3 page 2 even when PDF text has 'Bilanzierungsund'."""
+    pages = extract_pages(
+        CONTRACTS_DIR / "Vertrag_3_Landesbank_Investitionsdarlehen.pdf"
+    )
+    src = Source(
+        page=2,
+        section="§ 1 Abs. 3",
+        quote="Bilanzierungs- und Bewertungsmethoden",
+    )
+    res_direct = verify_source(src, pages)
+    assert res_direct.verified is True
+    assert res_direct.page == 2
+
+    # Simulate PyMuPDF dehyphenation ('Bilanzierungs-\nund' -> 'Bilanzierungsund') on page 2
+    dehyphenated_pages = [
+        p.model_copy(
+            update={"text": p.text.replace("Bilanzierungs-\nund", "Bilanzierungsund")}
+        )
+        if p.page == 2
+        else p
+        for p in pages
+    ]
+    assert "Bilanzierungsund" in dehyphenated_pages[1].text
+    res_dehyph = verify_source(src, dehyphenated_pages)
+    assert res_dehyph.verified is True
+    assert res_dehyph.page == 2
+    assert res_dehyph.verify_note == "Abgleich ohne Satzzeichen/Trennstriche"

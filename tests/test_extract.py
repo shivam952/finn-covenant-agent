@@ -10,7 +10,7 @@ import pytest
 
 from finn.config import Settings
 from finn.contracts.extract import extract_covenants
-from finn.llm import LLMClient, LLMError
+from finn.llm import LLMClient, LLMError, TransportReturn
 from finn.models import ContractCovenants, build_llm_json_schema
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -61,7 +61,7 @@ def test_extract_caches_and_reuses_without_calling_llm_twice(tmp_path: Path) -> 
 
     def fake_transport(
         model: str, messages: list[dict[str, str]], schema: dict[str, Any]
-    ) -> tuple[str, int, int]:
+    ) -> TransportReturn:
         calls.append(model)
         return v2_gold.model_dump_json(), 1000, 250
 
@@ -106,7 +106,7 @@ def test_invalid_json_then_valid_succeeds_on_second_attempt(tmp_path: Path) -> N
 
     def fake_transport(
         model: str, messages: list[dict[str, str]], schema: dict[str, Any]
-    ) -> tuple[str, int, int]:
+    ) -> TransportReturn:
         nonlocal idx
         out = responses[idx]
         idx += 1
@@ -117,6 +117,9 @@ def test_invalid_json_then_valid_succeeds_on_second_attempt(tmp_path: Path) -> N
 
     cc, meta = extract_covenants(pdf_path, llm, tmp_path / "cache")
     assert meta["attempts"] == 2
+    assert len(meta["attempt_log"]) == 2
+    assert meta["attempt_log"][0]["status"] == "error"
+    assert meta["attempt_log"][1]["status"] == "ok"
     assert _strip_verified(cc) == _strip_verified(v3_gold)
 
 
@@ -132,7 +135,7 @@ def test_fallback_model_used_when_primary_fails_twice_and_raises_without_fallbac
 
     def fake_transport_with_fallback(
         model: str, messages: list[dict[str, str]], schema: dict[str, Any]
-    ) -> tuple[str, int, int]:
+    ) -> TransportReturn:
         models_called.append(model)
         if model == "primary-bad":
             return '{"broken": true}', 100, 20
@@ -183,7 +186,7 @@ def test_inconsistent_has_covenants_triggers_retry_and_contract_1_no_covenants(
 
     def fake_transport(
         model: str, messages: list[dict[str, str]], schema: dict[str, Any]
-    ) -> tuple[str, int, int]:
+    ) -> TransportReturn:
         nonlocal call_idx
         out = responses[call_idx]
         call_idx += 1
@@ -198,3 +201,98 @@ def test_inconsistent_has_covenants_triggers_retry_and_contract_1_no_covenants(
     assert cc.reason_if_none == v1_gold.reason_if_none
     assert cc.reason_source is not None
     assert cc.reason_source.verified is True
+
+
+def test_http_401_skips_same_model_retry_and_uses_fallback_while_budget_exceeded_raises(
+    tmp_path: Path,
+) -> None:
+    """HTTP 401 does not retry on the same model and goes straight to fallback; exceeding time budget raises LLMError."""
+    golden_map = _load_golden()
+    v2_gold = golden_map["Vertrag_2_Foerderbank_Foerderdarlehen.pdf"]
+    pdf_path = CONTRACTS_DIR / v2_gold.contract_file
+
+    class FakeHTTPError(Exception):
+        def __init__(self, status_code: int, msg: str) -> None:
+            super().__init__(msg)
+            self.status_code = status_code
+
+    models_called: list[str] = []
+    sleeps: list[float] = []
+
+    def fake_transport_401(
+        model: str, messages: list[dict[str, str]], schema: dict[str, Any]
+    ) -> TransportReturn:
+        models_called.append(model)
+        if model == "model-401":
+            raise FakeHTTPError(401, "Unauthorized / invalid model access")
+        return v2_gold.model_dump_json(), 600, 150
+
+    settings = Settings(
+        openrouter_api_key="test",
+        openrouter_model="model-401",
+        openrouter_model_fallback="model-fallback",
+    )
+    llm = LLMClient(
+        settings,
+        transport=fake_transport_401,
+        sleep_fn=lambda s: sleeps.append(s),
+    )
+    cc, meta = extract_covenants(pdf_path, llm, tmp_path / "cache_401")
+    # Only 1 attempt on model-401 (no retry on 401, no sleep), then 1 attempt on model-fallback
+    assert models_called == ["model-401", "model-fallback"]
+    assert sleeps == []
+    assert meta["attempts"] == 2
+    assert meta["model"] == "model-fallback"
+    assert meta["attempt_log"][0]["status_code"] == 401
+    assert _strip_verified(cc) == _strip_verified(v2_gold)
+
+    # Time budget exceeded -> raises LLMError immediately
+    fake_now = 0.0
+
+    def advancing_clock() -> float:
+        return fake_now
+
+    def slow_transport(
+        model: str, messages: list[dict[str, str]], schema: dict[str, Any]
+    ) -> TransportReturn:
+        nonlocal fake_now
+        fake_now += 200.0
+        return v2_gold.model_dump_json(), 100, 50
+
+    budget_settings = Settings(
+        openrouter_api_key="test",
+        openrouter_model="slow-model",
+        llm_time_budget_s=180.0,
+    )
+    llm_budget = LLMClient(
+        budget_settings,
+        transport=slow_transport,
+        clock_fn=advancing_clock,
+    )
+    with pytest.raises(LLMError, match="time budget"):
+        extract_covenants(pdf_path, llm_budget, tmp_path / "cache_budget")
+
+
+def test_finish_reason_length_triggers_retry(tmp_path: Path) -> None:
+    """When finish_reason is 'length', LLMClient treats it as a truncated failure and retries."""
+    golden_map = _load_golden()
+    v2_gold = golden_map["Vertrag_2_Foerderbank_Foerderdarlehen.pdf"]
+    pdf_path = CONTRACTS_DIR / v2_gold.contract_file
+
+    attempt = 0
+
+    def fake_transport_length(
+        model: str, messages: list[dict[str, str]], schema: dict[str, Any]
+    ) -> TransportReturn:
+        nonlocal attempt
+        attempt += 1
+        if attempt == 1:
+            return v2_gold.model_dump_json()[:120], 900, 12000, "length"
+        return v2_gold.model_dump_json(), 950, 300, "stop"
+
+    settings = Settings(openrouter_api_key="test", openrouter_model="model-primary")
+    llm = LLMClient(settings, transport=fake_transport_length)
+    cc, meta = extract_covenants(pdf_path, llm, tmp_path / "cache_len")
+    assert meta["attempts"] == 2
+    assert "Antwort abgeschnitten (max_tokens)" in meta["attempt_log"][0]["error"]
+    assert _strip_verified(cc) == _strip_verified(v2_gold)

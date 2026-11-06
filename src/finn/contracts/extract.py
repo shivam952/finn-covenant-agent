@@ -67,7 +67,7 @@ def _semantic_warnings(cc: ContractCovenants) -> list[str]:
             warnings.append(
                 f"Nicht verifiziertes Zitat ({src.section}, S. {src.page}): {src.verify_note}"
             )
-        elif src.verify_note:
+        elif src.verify_note and src.verify_note.startswith("Seitenangabe korrigiert"):
             warnings.append(f"Hinweis zum Zitat ({src.section}): {src.verify_note}")
 
     return warnings
@@ -80,6 +80,7 @@ def extract_covenants(
     prompt_version: str = "v1",
     *,
     prompt_path: Path | None = None,
+    use_cache: bool = True,
 ) -> tuple[ContractCovenants, dict[str, Any]]:
     """Extract and verify ContractCovenants from a PDF contract with SHA-256 disk caching."""
     pdf_path = Path(pdf_path)
@@ -92,7 +93,7 @@ def extract_covenants(
     cache_key = _compute_cache_key(pdf_path, prompt_bytes, model_name, prompt_version)
     cache_file = cache_dir / f"covenants_{cache_key[:16]}.json"
 
-    if cache_file.exists():
+    if use_cache and cache_file.exists():
         cached_payload = json.loads(cache_file.read_text(encoding="utf-8"))
         cached_contract = ContractCovenants.model_validate(cached_payload["contract"])
         cached_meta = dict(cached_payload.get("meta", {}))
@@ -150,6 +151,7 @@ def extract_all(
     prompt_version: str = "v1",
     *,
     prompt_path: Path | None = None,
+    use_cache: bool = True,
 ) -> list[tuple[ContractCovenants, dict[str, Any]]]:
     """Extract covenants for all PDF files in contracts_dir, sorted by file name."""
     contracts_dir = Path(contracts_dir)
@@ -162,6 +164,7 @@ def extract_all(
             cache_dir,
             prompt_version=prompt_version,
             prompt_path=prompt_path,
+            use_cache=use_cache,
         )
         results.append(res)
     return results
@@ -197,7 +200,7 @@ def _resolve_signature(
     return sorted(out)
 
 
-def _compare_with_golden() -> int:
+def _compare_with_golden(*, use_cache: bool = True) -> int:
     """Run live extraction on data/contracts and compare with tests/fixtures/golden_covenants.json."""
     settings = load_settings()
     llm = LLMClient(settings)
@@ -209,10 +212,18 @@ def _compare_with_golden() -> int:
     ]
     golden_by_file = {g.contract_file: g for g in golden_list}
 
-    extracted_pairs = extract_all(settings.contracts_dir, llm, settings.cache_dir)
+    extracted_pairs = extract_all(
+        settings.contracts_dir,
+        llm,
+        settings.cache_dir,
+        use_cache=use_cache,
+    )
     differences: list[str] = []
 
-    print(f"=== Live Extraction Comparison (model: {llm.model_name}) ===\n")
+    print(
+        f"=== Live Extraction Comparison (configured: {llm.model_name}, "
+        f"fallback: {llm.fallback_model_name or 'none'}, cache={'on' if use_cache else 'off'}) ===\n"
+    )
     for cc, meta in extracted_pairs:
         gold = golden_by_file.get(cc.contract_file)
         if gold is None:
@@ -225,10 +236,12 @@ def _compare_with_golden() -> int:
         p_tok = meta.get("prompt_tokens", 0)
         c_tok = meta.get("completion_tokens", 0)
         lat = meta.get("latency_s", 0.0)
+        actual_model = meta.get("model", llm.model_name)
+        attempts = meta.get("attempts", 1)
         hit = "CACHE" if meta.get("cache_hit") else "LIVE"
 
         print(
-            f"[{cc.contract_file}] ({hit}) "
+            f"[{cc.contract_file}] ({hit}) model={actual_model} attempts={attempts} | "
             f"has_covenants={cc.has_covenants} (gold={gold.has_covenants}) | "
             f"covenants={len(cc.covenants)} (gold={len(gold.covenants)}) | "
             f"verified={q_ver}/{q_tot} ({ver_pct:.0f}%) | "
@@ -304,7 +317,7 @@ def _compare_with_golden() -> int:
     print("DIFFERENCES:")
     for diff in differences:
         print(f"  * {diff}")
-    return 0
+    return 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -314,9 +327,14 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Run live extraction on data/contracts and compare with golden_covenants.json",
     )
+    parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        help="Bypass the disk cache and force live LLM calls",
+    )
     args = parser.parse_args(argv)
     if args.compare:
-        return _compare_with_golden()
+        return _compare_with_golden(use_cache=not args.no_cache)
     parser.print_help()
     return 0
 
