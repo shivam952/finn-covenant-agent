@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 
 class Source(BaseModel):
@@ -55,6 +55,38 @@ class ContractCovenants(BaseModel):
     quantities: list[Quantity]
     covenants: list[Covenant]
 
+    @model_validator(mode="after")
+    def _validate_consistency(self) -> ContractCovenants:
+        if not self.has_covenants:
+            if self.covenants:
+                raise ValueError("covenants must be empty when has_covenants is False")
+            if not self.reason_if_none or not self.reason_if_none.strip():
+                raise ValueError("reason_if_none must be set when has_covenants is False")
+            return self
+
+        if not self.covenants:
+            raise ValueError("covenants must be non-empty when has_covenants is True")
+
+        quantity_names = {q.name for q in self.quantities}
+        for cov in self.covenants:
+            if cov.numerator not in quantity_names:
+                raise ValueError(
+                    f"Covenant '{cov.id}' numerator '{cov.numerator}' not found in quantities"
+                )
+            if cov.denominator not in quantity_names:
+                raise ValueError(
+                    f"Covenant '{cov.id}' denominator '{cov.denominator}' not found in quantities"
+                )
+
+        for qty in self.quantities:
+            for comp in qty.components:
+                if comp.ref is not None and comp.ref not in quantity_names:
+                    raise ValueError(
+                        f"Component '{comp.name}' in quantity '{qty.name}' references unknown quantity '{comp.ref}'"
+                    )
+
+        return self
+
 
 class PlanItem(BaseModel):
     id: str                      # equals the cell reference, e.g. "GuV!D17"
@@ -67,9 +99,10 @@ class PlanItem(BaseModel):
 
 
 class TermMapping(BaseModel):
+    contract_file: str
     quantity: str
     component: str
-    item_ids: list[str]          # PlanItem ids only; summed
+    item_ids: list[str]          # may be EMPTY = this line has no plan value (e.g. no extraordinary items) → contributes 0
     rationale: str               # one German sentence why these cells match the definition
 
 
@@ -98,4 +131,3 @@ class RunReport(BaseModel):
     results: list[Result]
     contracts_without_covenants: list[ContractCovenants]
     warnings: list[str]
-

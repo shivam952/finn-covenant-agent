@@ -1,0 +1,206 @@
+[
+  {
+    "contract_file": "Vertrag_2_Foerderbank_Foerderdarlehen.pdf",
+    "quantity": "Wirtschaftliches Eigenkapital",
+    "component": "Eigenkapital",
+    "item_ids": [
+      "Bilanz!D22"
+    ],
+    "rationale": "Bilanzposition A. Eigenkapital zum 31.12.2027."
+  },
+  {
+    "contract_file": "Vertrag_2_Foerderbank_Foerderdarlehen.pdf",
+    "quantity": "Wirtschaftliches Eigenkapital",
+    "component": "Sonderposten",
+    "item_ids": [
+      "Bilanz!D23"
+    ],
+    "rationale": "Sonderposten für Investitions- und Baukostenzuschüsse; Gewichtung 50 % erfolgt im Code."
+  },
+  {
+    "contract_file": "Vertrag_2_Foerderbank_Foerderdarlehen.pdf",
+    "quantity": "Bilanzsumme",
+    "component": "Bilanzsumme",
+    "item_ids": [
+      "Bilanz!D15"
+    ],
+    "rationale": "Summe Aktiva."
+  },
+  {
+    "contract_file": "Vertrag_3_Landesbank_Investitionsdarlehen.pdf",
+    "quantity": "EBITDA",
+    "component": "Jahresüberschuss bzw. Jahresfehlbetrag",
+    "item_ids": [
+      "GuV!D18"
+    ],
+    "rationale": "Jahresüberschuss laut Erfolgsplan 2027."
+  },
+  {
+    "contract_file": "Vertrag_3_Landesbank_Investitionsdarlehen.pdf",
+    "quantity": "EBITDA",
+    "component": "Steuern vom Einkommen und vom Ertrag",
+    "item_ids": [
+      "GuV!D17"
+    ],
+    "rationale": "Ertragsteuern laut Erfolgsplan."
+  },
+  {
+    "contract_file": "Vertrag_3_Landesbank_Investitionsdarlehen.pdf",
+    "quantity": "EBITDA",
+    "component": "Zinsen und ähnliche Aufwendungen",
+    "item_ids": [
+      "GuV!D13"
+    ],
+    "rationale": "Gesamte GuV-Position Zinsaufwand (inkl. Aufzinsung), da das EBITDA die ganze Position hinzurechnet."
+  },
+  {
+    "contract_file": "Vertrag_3_Landesbank_Investitionsdarlehen.pdf",
+    "quantity": "EBITDA",
+    "component": "Sonstige Zinsen und ähnliche Erträge",
+    "item_ids": [
+      "GuV!D12"
+    ],
+    "rationale": "Zinserträge laut Erfolgsplan."
+  },
+  {
+    "contract_file": "Vertrag_3_Landesbank_Investitionsdarlehen.pdf",
+    "quantity": "EBITDA",
+    "component": "Abschreibungen auf immaterielle Vermögensgegenstände und Sachanlagen",
+    "item_ids": [
+      "GuV!D9"
+    ],
+    "rationale": "Abschreibungen laut Erfolgsplan."
+  },
+  {
+    "contract_file": "Vertrag_3_Landesbank_Investitionsdarlehen.pdf",
+    "quantity": "EBITDA",
+    "component": "Außerordentliche Aufwendungen bzw. Erträge (§ 285 Nr. 31 HGB)",
+    "item_ids": [],
+    "rationale": "Der Erfolgsplan weist keine außerordentlichen Posten aus."
+  },
+  {
+    "contract_file": "Vertrag_3_Landesbank_Investitionsdarlehen.pdf",
+    "quantity": "Ertragsteuern",
+    "component": "Steuern vom Einkommen und vom Ertrag",
+    "item_ids": [
+      "GuV!D17"
+    ],
+    "rationale": "Ertragsteuern laut Erfolgsplan."
+  },
+  {
+    "contract_file": "Vertrag_3_Landesbank_Investitionsdarlehen.pdf",
+    "quantity": "Schuldendienst",
+    "component": "Zinsaufwand für Finanzverbindlichkeiten",
+    "item_ids": [
+      "Finanzierung!G5",
+      "Finanzierung!G6",
+      "Finanzierung!G7",
+      "Finanzierung!G8",
+      "Finanzierung!G9",
+      "Finanzierung!G13"
+    ],
+    "rationale": "Zinsaufwand je Darlehen laut Darlehensspiegel (ohne Aufzinsung), inkl. Gesellschafterdarlehen, da Rangrücktritt unerheblich."
+  },
+  {
+    "contract_file": "Vertrag_3_Landesbank_Investitionsdarlehen.pdf",
+    "quantity": "Schuldendienst",
+    "component": "Planmäßige Tilgungsleistungen auf Finanzverbindlichkeiten",
+    "item_ids": [
+      "Finanzierung!D5",
+      "Finanzierung!D6",
+      "Finanzierung!D7",
+      "Finanzierung!D8",
+      "Finanzierung!D9",
+      "Finanzierung!D13"
+    ],
+    "rationale": "Planmäßige Tilgung je Darlehen inkl. Gesellschafterdarlehen; Sondertilgung (Spalte E) ausgeschlossen."
+  },
+  {
+    "contract_file": "Vertrag_4_Konsortialkredit.pdf",
+    "quantity": "Eigenkapital",
+    "component": "Eigenkapital",
+    "item_ids": [
+      "Bilanz!D22"
+    ],
+    "rationale": "Bilanzposition A. Eigenkapital, ohne Sonderposten."
+  },
+  {
+    "contract_file": "Vertrag_4_Konsortialkredit.pdf",
+    "quantity": "Bilanzsumme",
+    "component": "Bilanzsumme",
+    "item_ids": [
+      "Bilanz!D15"
+    ],
+    "rationale": "Summe Aktiva."
+  },
+  {
+    "contract_file": "Vertrag_4_Konsortialkredit.pdf",
+    "quantity": "EBITDA",
+    "component": "Jahresüberschuss bzw. Jahresfehlbetrag",
+    "item_ids": [
+      "GuV!D18"
+    ],
+    "rationale": "Jahresüberschuss laut Erfolgsplan 2027."
+  },
+  {
+    "contract_file": "Vertrag_4_Konsortialkredit.pdf",
+    "quantity": "EBITDA",
+    "component": "Steuern vom Einkommen und vom Ertrag",
+    "item_ids": [
+      "GuV!D17"
+    ],
+    "rationale": "Ertragsteuern laut Erfolgsplan."
+  },
+  {
+    "contract_file": "Vertrag_4_Konsortialkredit.pdf",
+    "quantity": "EBITDA",
+    "component": "Zinsen und ähnliche Aufwendungen",
+    "item_ids": [
+      "GuV!D13"
+    ],
+    "rationale": "Gesamte GuV-Position Zinsaufwand (inkl. Aufzinsung), da das EBITDA die ganze Position hinzurechnet."
+  },
+  {
+    "contract_file": "Vertrag_4_Konsortialkredit.pdf",
+    "quantity": "EBITDA",
+    "component": "Sonstige Zinsen und ähnliche Erträge",
+    "item_ids": [
+      "GuV!D12"
+    ],
+    "rationale": "Zinserträge laut Erfolgsplan."
+  },
+  {
+    "contract_file": "Vertrag_4_Konsortialkredit.pdf",
+    "quantity": "EBITDA",
+    "component": "Abschreibungen auf immaterielle Vermögensgegenstände und Sachanlagen",
+    "item_ids": [
+      "GuV!D9"
+    ],
+    "rationale": "Abschreibungen laut Erfolgsplan."
+  },
+  {
+    "contract_file": "Vertrag_4_Konsortialkredit.pdf",
+    "quantity": "EBITDA",
+    "component": "Außerordentliche Aufwendungen bzw. Erträge (§ 285 Nr. 31 HGB)",
+    "item_ids": [],
+    "rationale": "Der Erfolgsplan weist keine außerordentlichen Posten aus."
+  },
+  {
+    "contract_file": "Vertrag_4_Konsortialkredit.pdf",
+    "quantity": "Nettofinanzverbindlichkeiten",
+    "component": "Finanzverbindlichkeiten",
+    "item_ids": [
+      "Bilanz!D28"
+    ],
+    "rationale": "Verbindlichkeiten gegenüber Kreditinstituten; das Gesellschafterdarlehen ist nachrangig mit qualifiziertem Rangrücktritt und daher ausgenommen."
+  },
+  {
+    "contract_file": "Vertrag_4_Konsortialkredit.pdf",
+    "quantity": "Nettofinanzverbindlichkeiten",
+    "component": "Liquide Mittel",
+    "item_ids": [
+      "Bilanz!D12"
+    ],
+    "rationale": "Kassenbestand und Bankguthaben, laut Erläuterung frei verfügbar."
+  }
+]

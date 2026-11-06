@@ -73,7 +73,7 @@ def test_contract_covenants_validates_and_invalid_sign_rejected() -> None:
         id="V4-EKQ",
         name="Eigenkapitalquote",
         numerator="Eigenkapital",
-        denominator="Bilanzsumme",
+        denominator="Eigenkapital",
         operator=">=",
         limit=30.0,
         unit="percent",
@@ -102,6 +102,28 @@ def test_contract_covenants_validates_and_invalid_sign_rejected() -> None:
             name="Invalid Sign Component",
             sign=2,  # type: ignore[arg-type]
             definition="Must fail validation because sign is not 1 or -1",
+        )
+
+    with pytest.raises(ValidationError, match="denominator 'Unbekannt'"):
+        ContractCovenants(
+            contract_file="Vertrag_4_Konsortialkredit.pdf",
+            contract_label="Vertrag 4 – Konsortialkredit",
+            has_covenants=True,
+            reason_if_none=None,
+            reason_source=None,
+            quantities=[qty_ek],
+            covenants=[cov.model_copy(update={"denominator": "Unbekannt"})],
+        )
+
+    with pytest.raises(ValidationError, match="reason_if_none"):
+        ContractCovenants(
+            contract_file="Vertrag_1_Sparkasse_Investitionsdarlehen.pdf",
+            contract_label="Vertrag 1",
+            has_covenants=False,
+            reason_if_none=None,
+            reason_source=None,
+            quantities=[],
+            covenants=[],
         )
 
 

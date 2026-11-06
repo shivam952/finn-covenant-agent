@@ -1,0 +1,447 @@
+[
+  {
+    "contract_file": "Vertrag_1_Sparkasse_Investitionsdarlehen.pdf",
+    "contract_label": "Vertrag 1 – Sparkasse Musterstadt, Investitionsdarlehen Nr. 4471 203 118",
+    "has_covenants": false,
+    "reason_if_none": "Der Vertrag enthält keine Verpflichtung zur Einhaltung von Finanzkennzahlen. Die in der Präambel genannten Werte (Eigenkapitalquote 28,4 %, dynamischer Verschuldungsgrad 2,9 zum 31.12.2019) beschreiben nur die Grundlage der Kreditentscheidung; das Darlehen ist über eine Ausfallbürgschaft der Stadt besichert (§ 10).",
+    "reason_source": {
+      "page": 1,
+      "section": "Präambel",
+      "quote": "Zum 31. Dezember 2019 wies die Kreditnehmerin eine bilanzielle Eigenkapitalquote von 28,4 %"
+    },
+    "quantities": [],
+    "covenants": []
+  },
+  {
+    "contract_file": "Vertrag_2_Foerderbank_Foerderdarlehen.pdf",
+    "contract_label": "Vertrag 2 – Förderbank Musterland, Förderdarlehen FD-2022-08817",
+    "has_covenants": true,
+    "reason_if_none": null,
+    "reason_source": null,
+    "quantities": [
+      {
+        "name": "Wirtschaftliches Eigenkapital",
+        "components": [
+          {
+            "name": "Eigenkapital",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Eigenkapital gemäß § 266 Abs. 3 Buchstabe A HGB"
+          },
+          {
+            "name": "Sonderposten",
+            "sign": 1,
+            "weight": 0.5,
+            "ref": null,
+            "definition": "50 % der Sonderposten für Investitions- und Baukostenzuschüsse"
+          }
+        ],
+        "source": {
+          "page": 2,
+          "section": "§ 1 Abs. 1",
+          "quote": "„Wirtschaftliches Eigenkapital“ bezeichnet das Eigenkapital zuzüglich 50 % (fünfzig Prozent) der Sonderposten."
+        }
+      },
+      {
+        "name": "Bilanzsumme",
+        "components": [
+          {
+            "name": "Bilanzsumme",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Summe der Aktiva"
+          }
+        ],
+        "source": {
+          "page": 1,
+          "section": "§ 1 Abs. 1",
+          "quote": "„Bilanzsumme“ bezeichnet die Summe der Aktiva"
+        }
+      }
+    ],
+    "covenants": [
+      {
+        "id": "V2-WEKQ",
+        "name": "Wirtschaftliche Eigenkapitalquote",
+        "numerator": "Wirtschaftliches Eigenkapital",
+        "denominator": "Bilanzsumme",
+        "operator": ">=",
+        "limit": 27.5,
+        "unit": "percent",
+        "rounding_decimals": null,
+        "test_basis": "stichtag",
+        "source": {
+          "page": 6,
+          "section": "§ 13 Abs. 1",
+          "quote": "eine Wirtschaftliche Eigenkapitalquote von mindestens 27,5 % einzuhalten"
+        },
+        "definition_sources": [
+          {
+            "page": 2,
+            "section": "§ 1 Abs. 1",
+            "quote": "„Wirtschaftliche Eigenkapitalquote“ bezeichnet das Verhältnis des Wirtschaftlichen Eigenkapitals zur Bilanzsumme"
+          },
+          {
+            "page": 2,
+            "section": "§ 1 Abs. 1",
+            "quote": "Gesellschafterdarlehen, Rückstellungen und sonstige Fremdkapitalpositionen werden dem Wirtschaftlichen Eigenkapital nicht zugerechnet"
+          }
+        ],
+        "plan_basis_note": "Eine Unterschreitung laut Vorschau auf Planbasis begründet für sich genommen keinen Kündigungsgrund; die Parteien nehmen Gespräche über Maßnahmen auf (§ 13 Abs. 3)."
+      }
+    ]
+  },
+  {
+    "contract_file": "Vertrag_3_Landesbank_Investitionsdarlehen.pdf",
+    "contract_label": "Vertrag 3 – Landesbank Mittelland, Investitionsdarlehen LBM-INV-2025-0412",
+    "has_covenants": true,
+    "reason_if_none": null,
+    "reason_source": null,
+    "quantities": [
+      {
+        "name": "EBITDA",
+        "components": [
+          {
+            "name": "Jahresüberschuss bzw. Jahresfehlbetrag",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Ausgangsgröße laut Gewinn- und Verlustrechnung"
+          },
+          {
+            "name": "Steuern vom Einkommen und vom Ertrag",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "zuzüglich"
+          },
+          {
+            "name": "Zinsen und ähnliche Aufwendungen",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "zuzüglich (gesamte GuV-Position)"
+          },
+          {
+            "name": "Sonstige Zinsen und ähnliche Erträge",
+            "sign": -1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "abzüglich"
+          },
+          {
+            "name": "Abschreibungen auf immaterielle Vermögensgegenstände und Sachanlagen",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "zuzüglich"
+          },
+          {
+            "name": "Außerordentliche Aufwendungen bzw. Erträge (§ 285 Nr. 31 HGB)",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "zuzüglich bzw. abzüglich, soweit gesondert angegeben; im Plan nicht vorhanden"
+          }
+        ],
+        "source": {
+          "page": 13,
+          "section": "Anlage 3 Abs. 2",
+          "quote": "EBITDA bezeichnet für den Berechnungszeitraum den Jahresüberschuss bzw. Jahresfehlbetrag"
+        }
+      },
+      {
+        "name": "Ertragsteuern",
+        "components": [
+          {
+            "name": "Steuern vom Einkommen und vom Ertrag",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "laut GuV"
+          }
+        ],
+        "source": {
+          "page": 13,
+          "section": "Anlage 3 Abs. 5",
+          "quote": "Ertragsteuern bezeichnet die in der Gewinn- und Verlustrechnung"
+        }
+      },
+      {
+        "name": "EBITDA abzüglich Ertragsteuern",
+        "components": [
+          {
+            "name": "EBITDA",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": "EBITDA",
+            "definition": "gemäß Anlage 3 Abs. 2"
+          },
+          {
+            "name": "Ertragsteuern",
+            "sign": -1,
+            "weight": 1.0,
+            "ref": "Ertragsteuern",
+            "definition": "gemäß Anlage 3 Abs. 5"
+          }
+        ],
+        "source": {
+          "page": 13,
+          "section": "Anlage 3 Abs. 6",
+          "quote": "EBITDA abzüglich Ertragsteuern (Zähler)"
+        }
+      },
+      {
+        "name": "Schuldendienst",
+        "components": [
+          {
+            "name": "Zinsaufwand für Finanzverbindlichkeiten",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "ohne Aufzinsung von Rückstellungen; Finanzverbindlichkeiten einschließlich Gesellschafterdarlehen unabhängig vom Rangrücktritt"
+          },
+          {
+            "name": "Planmäßige Tilgungsleistungen auf Finanzverbindlichkeiten",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "ohne freiwillige Sondertilgungen, vorzeitige Rückzahlungen und refinanzierte Endfälligkeiten"
+          }
+        ],
+        "source": {
+          "page": 13,
+          "section": "Anlage 3 Abs. 4",
+          "quote": "Schuldendienst bezeichnet für den Berechnungszeitraum die Summe aus"
+        }
+      }
+    ],
+    "covenants": [
+      {
+        "id": "V3-DSCR",
+        "name": "Schuldendienstdeckungsgrad",
+        "numerator": "EBITDA abzüglich Ertragsteuern",
+        "denominator": "Schuldendienst",
+        "operator": ">=",
+        "limit": 1.3,
+        "unit": "ratio",
+        "rounding_decimals": 2,
+        "test_basis": "geschaeftsjahr",
+        "source": {
+          "page": 5,
+          "section": "§ 13 Abs. 1",
+          "quote": "einen Schuldendienstdeckungsgrad von mindestens 1,30 einzuhalten"
+        },
+        "definition_sources": [
+          {
+            "page": 13,
+            "section": "Anlage 3 Abs. 6",
+            "quote": "Der Schuldendienstdeckungsgrad ist auf zwei Nachkommastellen kaufmännisch zu runden."
+          },
+          {
+            "page": 13,
+            "section": "Anlage 3 Abs. 4 lit. a",
+            "quote": "Zinsaufwendungen aus der Aufzinsung von Rückstellungen (insbesondere Pensionsrückstellungen) sind nicht einzubeziehen"
+          },
+          {
+            "page": 13,
+            "section": "Anlage 3 Abs. 4 lit. b",
+            "quote": "Nicht einzubeziehen sind freiwillige Sondertilgungen"
+          },
+          {
+            "page": 13,
+            "section": "Anlage 3 Abs. 3",
+            "quote": "Darlehen von Gesellschaftern und sonstigen Dritten, und zwar unabhängig davon, ob für diese Darlehen ein Rangrücktritt vereinbart ist"
+          }
+        ],
+        "plan_basis_note": "Weist die Planberechnung weniger als 1,30 aus, legt die Kreditnehmerin binnen 30 Tagen Maßnahmen dar (§ 13 Abs. 3); Heilung durch Eigenkapitalzuführung möglich (§ 13 Abs. 4)."
+      }
+    ]
+  },
+  {
+    "contract_file": "Vertrag_4_Konsortialkredit.pdf",
+    "contract_label": "Vertrag 4 – Konsortialkredit (Agent: Weserland Bank AG), EUR 64 Mio.",
+    "has_covenants": true,
+    "reason_if_none": null,
+    "reason_source": null,
+    "quantities": [
+      {
+        "name": "Eigenkapital",
+        "components": [
+          {
+            "name": "Eigenkapital",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "bilanzielles Eigenkapital; Sonderposten, Rückstellungen und Gesellschafterdarlehen sind nicht Teil des Eigenkapitals"
+          }
+        ],
+        "source": {
+          "page": 2,
+          "section": "§ 1 Abs. 1",
+          "quote": "„Eigenkapital“ bezeichnet das bilanzielle Eigenkapital der Kreditnehmerin"
+        }
+      },
+      {
+        "name": "Bilanzsumme",
+        "components": [
+          {
+            "name": "Bilanzsumme",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Summe der Aktiva"
+          }
+        ],
+        "source": {
+          "page": 1,
+          "section": "§ 1 Abs. 1",
+          "quote": "„Bilanzsumme“ bezeichnet die Summe der Aktiva der Kreditnehmerin"
+        }
+      },
+      {
+        "name": "EBITDA",
+        "components": [
+          {
+            "name": "Jahresüberschuss bzw. Jahresfehlbetrag",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Ausgangsgröße laut Gewinn- und Verlustrechnung"
+          },
+          {
+            "name": "Steuern vom Einkommen und vom Ertrag",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "zuzüglich"
+          },
+          {
+            "name": "Zinsen und ähnliche Aufwendungen",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "zuzüglich (gesamte GuV-Position)"
+          },
+          {
+            "name": "Sonstige Zinsen und ähnliche Erträge",
+            "sign": -1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "abzüglich"
+          },
+          {
+            "name": "Abschreibungen auf immaterielle Vermögensgegenstände und Sachanlagen",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "zuzüglich"
+          },
+          {
+            "name": "Außerordentliche Aufwendungen bzw. Erträge (§ 285 Nr. 31 HGB)",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "zuzüglich bzw. abzüglich, soweit gesondert angegeben; im Plan nicht vorhanden"
+          }
+        ],
+        "source": {
+          "page": 2,
+          "section": "§ 1 Abs. 1",
+          "quote": "„EBITDA“ bezeichnet für einen Prüfungszeitraum den Jahresüberschuss bzw. Jahresfehlbetrag"
+        }
+      },
+      {
+        "name": "Nettofinanzverbindlichkeiten",
+        "components": [
+          {
+            "name": "Finanzverbindlichkeiten",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Darlehen, Anleihen, Finanzierungsleasing usw., jedoch ohne Nachrangige Gesellschafterdarlehen"
+          },
+          {
+            "name": "Liquide Mittel",
+            "sign": -1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Kassenbestand und Bankguthaben, soweit frei verfügbar und nicht verpfändet"
+          }
+        ],
+        "source": {
+          "page": 3,
+          "section": "§ 1 Abs. 1",
+          "quote": "Finanzverbindlichkeiten abzüglich der Liquiden Mittel."
+        }
+      }
+    ],
+    "covenants": [
+      {
+        "id": "V4-EKQ",
+        "name": "Eigenkapitalquote",
+        "numerator": "Eigenkapital",
+        "denominator": "Bilanzsumme",
+        "operator": ">=",
+        "limit": 30.0,
+        "unit": "percent",
+        "rounding_decimals": 1,
+        "test_basis": "stichtag",
+        "source": {
+          "page": 6,
+          "section": "§ 14 Abs. 1 lit. a",
+          "quote": "die Eigenkapitalquote zu jedem Prüfungsstichtag nicht weniger als 30,0 % beträgt"
+        },
+        "definition_sources": [
+          {
+            "page": 2,
+            "section": "§ 1 Abs. 1",
+            "quote": "Sonderposten (insbesondere für Investitions- und Baukostenzuschüsse), Rückstellungen und Gesellschafterdarlehen sind nicht Teil des Eigenkapitals"
+          },
+          {
+            "page": 7,
+            "section": "§ 14 Abs. 2",
+            "quote": "Die Eigenkapitalquote wird auf eine Nachkommastelle, der Dynamische Verschuldungsgrad auf zwei Nachkommastellen kaufmännisch gerundet."
+          }
+        ],
+        "plan_basis_note": "Eine Abweichung von den Grenzwerten auf Planbasis begründet keinen Kündigungsgrund, verpflichtet aber auf Verlangen der Mehrheitskreditgeber zu einem Gespräch über Gegenmaßnahmen (§ 14 Abs. 3)."
+      },
+      {
+        "id": "V4-DYNVG",
+        "name": "Dynamischer Verschuldungsgrad",
+        "numerator": "Nettofinanzverbindlichkeiten",
+        "denominator": "EBITDA",
+        "operator": "<=",
+        "limit": 3.5,
+        "unit": "ratio",
+        "rounding_decimals": 2,
+        "test_basis": "geschaeftsjahr",
+        "source": {
+          "page": 7,
+          "section": "§ 14 Abs. 1 lit. b",
+          "quote": "der Dynamische Verschuldungsgrad für jeden Prüfungszeitraum nicht mehr als 3,50"
+        },
+        "definition_sources": [
+          {
+            "page": 2,
+            "section": "§ 1 Abs. 1",
+            "quote": "„Dynamischer Verschuldungsgrad“ bezeichnet für einen Prüfungszeitraum das Verhältnis der Nettofinanzverbindlichkeiten"
+          },
+          {
+            "page": 2,
+            "section": "§ 1 Abs. 1",
+            "quote": "jedoch jeweils mit Ausnahme von Nachrangigen Gesellschafterdarlehen"
+          },
+          {
+            "page": 7,
+            "section": "§ 14 Abs. 2",
+            "quote": "Die Eigenkapitalquote wird auf eine Nachkommastelle, der Dynamische Verschuldungsgrad auf zwei Nachkommastellen kaufmännisch gerundet."
+          }
+        ],
+        "plan_basis_note": "Eine Abweichung von den Grenzwerten auf Planbasis begründet keinen Kündigungsgrund, verpflichtet aber auf Verlangen der Mehrheitskreditgeber zu einem Gespräch über Gegenmaßnahmen (§ 14 Abs. 3)."
+      }
+    ]
+  }
+]
