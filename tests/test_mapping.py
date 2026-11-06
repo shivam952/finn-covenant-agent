@@ -232,3 +232,4 @@ def test_changed_plan_value_hits_cache_while_renamed_label_misses_cache(
     _, meta3 = map_terms(v2, plan_lbl_changed, llm, cache_dir)
     assert meta3["cache_hit"] is False
     assert calls == 2
+

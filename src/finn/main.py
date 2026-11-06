@@ -14,6 +14,7 @@ from finn.llm import make_llm
 from finn.mail.inbox import parse_eml_file
 from finn.models import Result
 from finn.pipeline import RunContext, generate_run_id, run_check
+from finn.render import render_stress
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -42,19 +43,23 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument(
         "--compare-expected",
         action="store_true",
-        help="Compare every calculated result against tests/expected_2027.json",
+        help="Compare every calculated result against the expected answer key",
     )
 
     return parser
 
 
-def _fmt_result_val(val: float, unit: str, decimals: int = 2) -> str:
+def _fmt_result_val(val: float, unit: str, decimals: int = 2, lang: str = "de") -> str:
     if unit == "percent":
-        return fmt_pct(val, decimals)
-    return fmt_num(val, decimals)
+        return fmt_pct(val, decimals, lang=lang)
+    return fmt_num(val, decimals, lang=lang)
 
 
-def _print_report_table(results: list[Result]) -> None:
+def _print_report_table(
+    results: list[Result],
+    lang: str = "de",
+    amount_unit: str = "",
+) -> None:
     header = (
         f"{'Vertrag':<38} | {'Covenant':<33} | {'Wert':>10} | "
         f"{'Grenzwert':>11} | {'Headroom':>10} | {'eingehalten':<11} | Stress"
@@ -67,19 +72,20 @@ def _print_report_table(results: list[Result]) -> None:
             if len(r.contract_label) > 38
             else r.contract_label
         )
-        val_str = _fmt_result_val(r.value_reported, r.unit, 2)
-        lim_str = f"{r.operator} {_fmt_result_val(r.limit, r.unit, 2)}"
-        hr_str = _fmt_result_val(r.headroom, r.unit, 2)
+        val_str = _fmt_result_val(r.value_reported, r.unit, 2, lang=lang)
+        lim_str = f"{r.operator} {_fmt_result_val(r.limit, r.unit, 2, lang=lang)}"
+        hr_str = _fmt_result_val(r.headroom, r.unit, 2, lang=lang)
         met_str = "Ja" if r.met else "Nein"
+        stress_str = render_stress(r.stress, lang=lang, unit=amount_unit)
         print(
             f"{short_contract:<38} | {r.covenant_name:<33} | {val_str:>10} | "
-            f"{lim_str:>11} | {hr_str:>10} | {met_str:<11} | {r.stress_text}"
+            f"{lim_str:>11} | {hr_str:>10} | {met_str:<11} | {stress_str}"
         )
 
 
 def _compare_with_expected(audit: dict[str, Any]) -> bool:
     repo_root = Path(__file__).resolve().parents[2]
-    expected_path = repo_root / "tests" / "expected_2027.json"
+    expected_path = sorted((repo_root / "tests").glob("expected_*.json"))[0]
     expected_data = json.loads(expected_path.read_text(encoding="utf-8"))
     exp_contracts: dict[str, Any] = expected_data["contracts"]
 
@@ -94,7 +100,7 @@ def _compare_with_expected(audit: dict[str, Any]) -> bool:
         for r in audit.get("steps", {}).get("calculate", {}).get("results", [])
     ]
 
-    print("\n=== Vergleich mit tests/expected_2027.json ===")
+    print(f"\n=== Vergleich mit {expected_path.name} ===")
     all_ok = True
     for r in results_list:
         c_file = label_to_file.get(r.contract_label, "")
@@ -114,7 +120,7 @@ def _compare_with_expected(audit: dict[str, Any]) -> bool:
 
         if matched_exp is None:
             all_ok = False
-            print(f"✗ {c_file} [{r.covenant_name}]: Kein passender Eintrag in expected_2027.json")
+            print(f"✗ {c_file} [{r.covenant_name}]: Kein passender Eintrag in {expected_path.name}")
             continue
 
         diff_raw = abs(r.value_raw - float(matched_exp["value_raw"]))
@@ -173,7 +179,17 @@ def _run_eml_command(eml_path: Path, compare_expected: bool) -> int:
     }
     audit_path = write_audit(outcome.audit, settings.runs_dir)
 
-    _print_report_table(outcome.report.results)
+    amount_unit = str(
+        outcome.audit.get("steps", {})
+        .get("read_plan", {})
+        .get("meta", {})
+        .get("amount_unit", "")
+    )
+    _print_report_table(
+        outcome.report.results,
+        lang=settings.reply_language,
+        amount_unit=amount_unit,
+    )
 
     if outcome.report.contracts_without_covenants:
         print("\nVerträge ohne Financial Covenants:")

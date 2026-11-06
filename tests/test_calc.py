@@ -1,4 +1,4 @@
-"""Tests for the deterministic covenant calculator against the hand-checked answer key."""
+"""Tests for the deterministic covenant calculator, structured stress/formula, and rendering."""
 
 from __future__ import annotations
 
@@ -19,19 +19,26 @@ from finn.models import (
     TermMapping,
 )
 from finn.plan.reader import read_plan
+from finn.render import render_check, render_formula, render_stress
 
 TESTS_DIR = Path(__file__).resolve().parent
 SAMPLE_XLSX = TESTS_DIR.parent / "data" / "samples" / "Wirtschaftsplan_2027.xlsx"
 EXPECTED_PATH = TESTS_DIR / "expected_2027.json"
 GOLDEN_COVENANTS_PATH = TESTS_DIR / "fixtures" / "golden_covenants.json"
+GOLDEN_KINDS_PATH = TESTS_DIR / "fixtures" / "golden_kinds.json"
 GOLDEN_MAPPING_PATH = TESTS_DIR / "fixtures" / "golden_mapping.json"
 
 
 def _load_fixtures() -> tuple[list[ContractCovenants], list[TermMapping], dict]:
-    contracts = [
-        ContractCovenants.model_validate(c)
-        for c in json.loads(GOLDEN_COVENANTS_PATH.read_text(encoding="utf-8"))
-    ]
+    raw_contracts = json.loads(GOLDEN_COVENANTS_PATH.read_text(encoding="utf-8"))
+    kinds_overlay = json.loads(GOLDEN_KINDS_PATH.read_text(encoding="utf-8"))
+    for c_dict in raw_contracts:
+        c_kinds = kinds_overlay.get(c_dict["contract_file"], {})
+        for q_dict in c_dict["quantities"]:
+            if q_dict["name"] in c_kinds:
+                q_dict["kind"] = c_kinds[q_dict["name"]]
+
+    contracts = [ContractCovenants.model_validate(c) for c in raw_contracts]
     mappings = [
         TermMapping.model_validate(m)
         for m in json.loads(GOLDEN_MAPPING_PATH.read_text(encoding="utf-8"))
@@ -41,7 +48,7 @@ def _load_fixtures() -> tuple[list[ContractCovenants], list[TermMapping], dict]:
 
 
 def test_golden_covenants_and_mappings_match_expected_2027() -> None:
-    """Every covenant matches expected_2027.json on numerator, denominator, value_raw, value_reported, headroom, met, stress."""
+    """Every covenant matches expected_2027.json on numbers and produces structured stress and formula objects."""
     contracts, mappings, expected = _load_fixtures()
     plan = read_plan(SAMPLE_XLSX)
 
@@ -69,18 +76,122 @@ def test_golden_covenants_and_mappings_match_expected_2027() -> None:
             )
             assert res.met is exp_cov["met"]
 
-            expected_stress = exp_cov.get(
-                "stress_ebitda_drop_pct", exp_cov.get("stress_equity_loss_teur")
-            )
+            if "stress_ebitda_drop_pct" in exp_cov:
+                expected_stress = exp_cov["stress_ebitda_drop_pct"]
+                assert res.stress.kind == "earnings_decline"
+                assert res.stress.pct == pytest.approx(expected_stress, abs=0.01)
+                assert res.stress.amount is not None and res.stress.amount > 0
+            else:
+                expected_stress = exp_cov["stress_equity_loss_teur"]
+                assert res.stress.kind == "equity_loss"
+                assert res.stress.pct is None
+                assert res.stress.amount == pytest.approx(expected_stress, abs=0.01)
+
             assert res.stress_value == pytest.approx(expected_stress, abs=0.01)
 
     assert len(all_results) == 4
+
+    # Check German rendered sentence for V3-DSCR and V4-EKQ
+    by_id = {r.covenant_id: r for r in all_results}
+    dscr = by_id["V3-DSCR"]
+    assert (
+        render_stress(dscr.stress, lang="de", unit="T€")
+        == "Das EBITDA dürfte um 15,5 % (6.216 T€) sinken, bevor der Grenzwert von 1,30 unterschritten wird."
+    )
+    assert (
+        render_formula(dscr.formula, lang="de", unit="T€")
+        == "(40.200 − 3.200) / (4.930 + 18.750) = 1,5625 → gerundet 1,56"
+    )
+
+    ekq = by_id["V4-EKQ"]
+    assert (
+        render_stress(ekq.stress, lang="de", unit="T€")
+        == "Ein zusätzlicher Jahresverlust von 3.057 T€ würde die Quote unter 30,0 % drücken."
+    )
 
     # None of the trap values equals any value_reported
     trap_values = list(expected["trap_values_that_must_NOT_appear"].values())
     for res in all_results:
         for trap in trap_values:
             assert round(res.value_reported, 2) != pytest.approx(trap, abs=1e-6)
+
+
+def test_renamed_earnings_quantity_with_kind_earnings_produces_same_stress() -> None:
+    """Renaming the earnings quantity to 'Operatives Ergebnis vor Abschreibungen' (kind=earnings) gives identical stress."""
+    contracts, mappings, _ = _load_fixtures()
+    plan = read_plan(SAMPLE_XLSX)
+
+    new_name = "Operatives Ergebnis vor Abschreibungen"
+    for contract in contracts:
+        if not contract.has_covenants:
+            continue
+        base_results = evaluate_contract(contract, mappings, plan)
+
+        # Build variant where 'EBITDA' is renamed to new_name (preserving kind='earnings')
+        new_quantities = []
+        for q in contract.quantities:
+            q_name = new_name if q.name == "EBITDA" else q.name
+            new_comps = [
+                c.model_copy(
+                    update={"ref": new_name if c.ref == "EBITDA" else c.ref}
+                )
+                for c in q.components
+            ]
+            new_quantities.append(
+                q.model_copy(update={"name": q_name, "components": new_comps})
+            )
+        new_covenants = [
+            cov.model_copy(
+                update={
+                    "numerator": new_name if cov.numerator == "EBITDA" else cov.numerator,
+                    "denominator": new_name if cov.denominator == "EBITDA" else cov.denominator,
+                }
+            )
+            for cov in contract.covenants
+        ]
+        variant_contract = contract.model_copy(
+            update={"quantities": new_quantities, "covenants": new_covenants}
+        )
+        variant_mappings = [
+            m.model_copy(
+                update={"quantity": new_name if m.quantity == "EBITDA" else m.quantity}
+            )
+            for m in mappings
+        ]
+
+        var_results = evaluate_contract(variant_contract, variant_mappings, plan)
+        for r_base, r_var in zip(base_results, var_results, strict=True):
+            assert r_var.stress.kind == r_base.stress.kind
+            assert r_var.stress_value == pytest.approx(r_base.stress_value, abs=1e-9)
+            if r_base.stress.pct is not None:
+                assert r_var.stress.pct == pytest.approx(r_base.stress.pct, abs=1e-9)
+                assert r_var.stress.driver_quantity == new_name
+            if r_base.stress.amount is not None:
+                assert r_var.stress.amount == pytest.approx(r_base.stress.amount, abs=1e-9)
+
+
+def test_render_english_produces_english_sentences_and_number_formatting() -> None:
+    """render_stress, render_formula, and render_check in 'en' produce English sentences with English number formatting."""
+    contracts, mappings, _ = _load_fixtures()
+    plan = read_plan(SAMPLE_XLSX)
+    all_results = [
+        r for c in contracts for r in evaluate_contract(c, mappings, plan)
+    ]
+    by_id = {r.covenant_id: r for r in all_results}
+
+    dscr_en = render_stress(by_id["V3-DSCR"].stress, lang="en", unit="T€")
+    assert "could fall by 15.5 % (6,216 T€)" in dscr_en
+    assert "1.30" in dscr_en
+
+    dscr_formula_en = render_formula(by_id["V3-DSCR"].formula, lang="en", unit="T€")
+    assert dscr_formula_en == "(40,200 − 3,200) / (4,930 + 18,750) = 1.5625 → rounded 1.56"
+
+    ekq_en = render_stress(by_id["V4-EKQ"].stress, lang="en", unit="T€")
+    assert "An additional annual loss of 3,057 T€ would push the ratio below 30.0 %." == ekq_en
+
+    chk_en = render_check(plan.checks[0], lang="en", unit="T€")
+    assert "Plausibility check" in chk_en
+    assert "313,200 T€ = 313,200 T€" in chk_en
 
 
 def test_headroom_sign_for_both_operators() -> None:
@@ -138,6 +249,7 @@ def test_headroom_sign_for_both_operators() -> None:
     r_ge_breach = evaluate_contract(_make_contract(">=", 1.25), mapping, plan)[0]
     assert r_ge_breach.met is False
     assert r_ge_breach.headroom == pytest.approx(-0.25)
+    assert r_ge_breach.stress.kind == "already_breached"
 
     r_le_met = evaluate_contract(_make_contract("<=", 1.50), mapping, plan)[0]
     assert r_le_met.met is True
@@ -146,6 +258,7 @@ def test_headroom_sign_for_both_operators() -> None:
     r_le_breach = evaluate_contract(_make_contract("<=", 0.75), mapping, plan)[0]
     assert r_le_breach.met is False
     assert r_le_breach.headroom == pytest.approx(-0.25)
+    assert r_le_breach.stress.kind == "already_breached"
 
 
 def test_kaufmaennisch_rounding() -> None:
@@ -203,7 +316,7 @@ def test_changed_numbers_in_workbook(tmp_path: Path) -> None:
     assert v4_res_3["V4-DYNVG"].value_raw == pytest.approx(expected_dynvg_raw, abs=1e-9)
     # Bilanz total Passiva is a formula and must have been recomputed (+1000 + 5000 = +6000)
     assert plan_3.items["Bilanz!D34"].value == pytest.approx(313200.0 + 6000.0)
-    assert len(plan_3.checks) > 0
+    assert any(not c.passed for c in plan_3.checks)
     # Plan plausibility warnings belong in RunReport.warnings, not copied into Result.warnings
     assert v4_res_3["V4-DYNVG"].warnings == []
 
@@ -255,4 +368,3 @@ def test_missing_mapping_and_cyclic_ref_raise_calc_error() -> None:
     )
     with pytest.raises(CalcError, match="Zyklische Referenz"):
         evaluate_contract(cyclic_contract, [], plan)
-

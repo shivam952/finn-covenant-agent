@@ -1,4 +1,4 @@
-"""OpenRouter client wrapper for structured JSON schema outputs with bounded latency, retry, and fallback."""
+"""OpenAI-compatible client wrapper for structured JSON schema outputs with bounded latency, retry, and fallback."""
 
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ TransportReturn = tuple[str, int, int] | tuple[str, int, int, str | None]
 
 
 class LLMClient:
-    """OpenRouter client using the OpenAI SDK with structured outputs, 1 retry, and model fallback."""
+    """OpenAI-compatible client with structured outputs, 1 retry, and model fallback."""
 
     def __init__(
         self,
@@ -67,10 +67,18 @@ class LLMClient:
         if transport is None:
             settings.require_llm()
         self._settings = settings
-        self.model_name: str = settings.openrouter_model or "unconfigured-model"
-        self.fallback_model_name: str = settings.openrouter_model_fallback
+        self.base_url: str = settings.llm_base_url
+        self.model_name: str = settings.llm_model or "unconfigured-model"
+        self.fallback_model_name: str = settings.llm_model_fallback
         self.time_budget_s: float = settings.llm_time_budget_s
         self.max_tokens: int = settings.llm_max_tokens
+        self.provider_params: dict[str, Any] | None = None
+        raw_params = settings.llm_provider_params_json.strip()
+        if raw_params:
+            parsed_params = json.loads(raw_params)
+            if isinstance(parsed_params, dict) and parsed_params:
+                self.provider_params = parsed_params
+
         self._transport = transport
         self._clock_fn = clock_fn
         self._sleep_fn = sleep_fn
@@ -80,8 +88,8 @@ class LLMClient:
             if settings.app_url:
                 headers["HTTP-Referer"] = settings.app_url
             self._client = OpenAI(
-                base_url="https://openrouter.ai/api/v1",
-                api_key=settings.openrouter_api_key,
+                base_url=self.base_url,
+                api_key=settings.llm_api_key,
                 max_retries=0,
                 timeout=60.0,
                 default_headers=headers,
@@ -101,12 +109,12 @@ class LLMClient:
             return res[0], res[1], res[2], "stop"
 
         assert self._client is not None
-        response = self._client.chat.completions.create(
-            model=model,
-            temperature=0,
-            max_tokens=self.max_tokens,
-            messages=messages,  # type: ignore[arg-type]
-            response_format={
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "temperature": 0,
+            "max_tokens": self.max_tokens,
+            "messages": messages,
+            "response_format": {
                 "type": "json_schema",
                 "json_schema": {
                     "name": schema_name,
@@ -114,9 +122,12 @@ class LLMClient:
                     "strict": False,
                 },
             },
-            extra_body={"provider": {"require_parameters": True}},
-            timeout=60.0,
-        )
+            "timeout": 60.0,
+        }
+        if self.provider_params is not None:
+            kwargs["extra_body"] = {"provider": self.provider_params}
+
+        response = self._client.chat.completions.create(**kwargs)
         choice = response.choices[0]
         content = choice.message.content or ""
         finish_reason = choice.finish_reason

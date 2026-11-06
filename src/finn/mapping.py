@@ -70,13 +70,14 @@ def _leaf_components(contract: ContractCovenants) -> list[tuple[Quantity, Compon
 
 
 def _contract_canonical_json(contract: ContractCovenants) -> str:
-    """Serialize contract covenant/quantity structure (excluding verification flags) for cache key stability."""
+    """Serialize contract covenant/quantity structure (excluding verification flags and kind) for cache key stability."""
     data = contract.model_dump(mode="json")
 
     def _strip_verify(obj: Any) -> None:
         if isinstance(obj, dict):
             obj.pop("verified", None)
             obj.pop("verify_note", None)
+            obj.pop("kind", None)
             for v in obj.values():
                 _strip_verify(v)
         elif isinstance(obj, list):
@@ -127,7 +128,7 @@ def _build_mapping_user_message(
         )
 
     lines.append("")
-    lines.append("Wirtschaftsplan-Katalog 2027 (ohne Zahlenwerte):")
+    lines.append("Wirtschaftsplan-Katalog (ohne Zahlenwerte):")
     lines.append(catalog_no_values)
     return "\n".join(lines)
 
@@ -240,7 +241,7 @@ def _mapping_warnings(
                     f"gegensätzlichen Vorzeichen (+1 und -1) verwendet."
                 )
 
-    # 2. Sheet vs. covenant test_basis mismatch (e.g., GuV cell in stichtag covenant)
+    # 2. Sheet role vs. covenant test_basis mismatch (income_statement cell in stichtag covenant)
     for cov in contract.covenants:
         if cov.test_basis == "stichtag":
             for q_name in (cov.numerator, cov.denominator):
@@ -261,10 +262,10 @@ def _mapping_warnings(
                     if m is None:
                         continue
                     for cid in m.item_ids:
-                        if cid in plan.items and plan.items[cid].sheet == "GuV":
+                        if cid in plan.items and plan.items[cid].role == "income_statement":
                             warnings.append(
                                 f"Covenant '{cov.id}' (Stichtag): Komponente '{comp.name}' verwendet "
-                                f"GuV-Zelle '{cid}'."
+                                f"Erfolgsplan-Zelle '{cid}'."
                             )
 
     return warnings

@@ -129,14 +129,21 @@ def test_contract_covenants_validates_and_invalid_sign_rejected() -> None:
 
 def test_settings_loads_without_crashing_on_missing_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """config.py does not crash when LLM or mail variables are unset, and raises only when required."""
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-    monkeypatch.delenv("OPENROUTER_MODEL", raising=False)
-    monkeypatch.delenv("FINN_MAIL_ADDRESS", raising=False)
-    monkeypatch.delenv("MAIL_USER", raising=False)
-    monkeypatch.delenv("MAIL_APP_PASSWORD", raising=False)
+    for var in (
+        "LLM_API_KEY",
+        "LLM_MODEL",
+        "LLM_MODEL_FALLBACK",
+        "OPENROUTER_API_KEY",
+        "OPENROUTER_MODEL",
+        "OPENROUTER_MODEL_FALLBACK",
+        "FINN_MAIL_ADDRESS",
+        "MAIL_USER",
+        "MAIL_APP_PASSWORD",
+    ):
+        monkeypatch.delenv(var, raising=False)
 
     settings = Settings.from_env(load_env_file=False)
-    with pytest.raises(ValueError, match="OPENROUTER_API_KEY"):
+    with pytest.raises(ValueError, match="LLM_API_KEY"):
         settings.require_llm()
     with pytest.raises(ValueError, match="MAIL_USER"):
         settings.require_mail()
@@ -146,6 +153,8 @@ def test_settings_treats_hash_comment_as_empty_and_defaults_finn_mail(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Values starting with '#' are treated as empty; FINN_MAIL_ADDRESS defaults to MAIL_USER."""
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_MODEL", raising=False)
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test-key")
     monkeypatch.setenv("OPENROUTER_MODEL", "# inline comment that should be ignored")
     monkeypatch.delenv("FINN_MAIL_ADDRESS", raising=False)
@@ -154,6 +163,8 @@ def test_settings_treats_hash_comment_as_empty_and_defaults_finn_mail(
 
     settings = Settings.from_env(load_env_file=False)
     assert settings.openrouter_model == ""
+    assert settings.llm_model == ""
+    assert settings.llm_api_key == "sk-test-key"
     assert settings.finn_mail_address == "finn.bot@gmail.com"
     settings.require_mail()
 

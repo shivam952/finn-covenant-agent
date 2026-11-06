@@ -1,0 +1,18 @@
+[stress]
+earnings_decline_ge = "Das {driver} dürfte um {pct} ({amount}) sinken, bevor der Grenzwert von {limit} unterschritten wird."
+earnings_decline_le = "Das {driver} dürfte um {pct} ({amount}) sinken, bevor der Grenzwert von {limit} überschritten wird."
+equity_loss = "Ein zusätzlicher Jahresverlust von {amount} würde die Quote unter {limit} drücken."
+numerator_change_ge = "Der Zähler ({driver}) dürfte um {amount} sinken, bevor der Grenzwert von {limit} unterschritten wird."
+numerator_change_le = "Der Zähler ({driver}) dürfte um {amount} steigen, bevor der Grenzwert von {limit} überschritten wird."
+already_breached_ge = "Der Grenzwert von {limit} ist bereits um {diff} unterschritten."
+already_breached_le = "Der Grenzwert von {limit} ist bereits um {diff} überschritten."
+
+[formula]
+rounded = "{lhs} = {raw} → gerundet {reported}"
+exact = "{lhs} = {raw}"
+
+[checks]
+check_passed = "Plausibilitätsprüfung „{id}“ erfolgreich ({lhs} = {rhs})."
+check_failed = "Plausibilitätsprüfung „{id}“ fehlgeschlagen ({description}): {lhs} != {rhs}."
+check_skipped = "Plausibilitätsprüfung „{id}“ übersprungen ({description}): {reason}."
+formula_cache_mismatch = "Abweichung zwischen berechnetem Formelwert ({evaluated}) und gespeichertem Cache-Wert ({cached}) in {cell}; es wird der berechnete Wert verwendet."

@@ -23,6 +23,15 @@ If the contract contains NO binding financial covenants:
 Contract definitions of financial terms are often spread across § 1 (Begriffsbestimmungen / Definitionen), the financial covenants clause, and annexes (Anlagen). Follow every cross-reference carefully.
 
 - Every covenant's `numerator` and `denominator` MUST be the exact `name` of a `Quantity` in `quantities`. Even a single-item balance sheet figure (e.g., total assets or equity) must be defined as a `Quantity` with at least one `Component`.
+- Classify each `Quantity`'s `kind` using one of these generic categories:
+  - `"earnings"`: an operating or pre-debt-service earnings measure (such as operating earnings before depreciation/amortization or operating cash flow before debt service).
+  - `"equity"`: a balance-sheet equity or economic equity figure.
+  - `"total_assets"`: total balance-sheet assets / balance-sheet total.
+  - `"debt"`: gross or net financial debt / liabilities.
+  - `"cash"`: cash, bank balances, or liquid securities.
+  - `"debt_service"`: total debt service (interest plus scheduled principal repayments).
+  - `"taxes"`: income taxes or tax expenses.
+  - `"other"`: composite intermediate quantities (such as earnings after taxes) or any quantity that does not fit the categories above.
 - Break every defined `Quantity` into atomic `Component` entries—one component per line or element of the contractual definition:
   - Items added ("zuzüglich", starting base, or sum element) get `sign: 1`.
   - Items subtracted ("abzüglich", "vermindert um") get `sign: -1`.

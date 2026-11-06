@@ -6,15 +6,21 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_LLM_BASE_URL = "https://openrouter.ai/api/v1"
+DEFAULT_PROVIDER_PARAMS_JSON = '{"require_parameters": true}'
 
 
-def _clean_env(name: str, default: str = "") -> str:
+def _clean_env(name: str, default: str | None = None) -> str | None:
     """Read an environment variable, strip whitespace, and treat values starting with '#' as empty."""
-    raw = os.getenv(name, "").strip()
-    if raw.startswith("#"):
+    if name not in os.environ:
         return default
-    return raw or default
+    raw = os.environ[name].strip()
+    if raw.startswith("#"):
+        return default if default is not None else ""
+    return raw
 
 
 class Settings(BaseModel):
@@ -22,12 +28,19 @@ class Settings(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    llm_base_url: str = DEFAULT_LLM_BASE_URL
+    llm_api_key: str = ""
+    llm_model: str = ""
+    llm_model_fallback: str = ""
+    llm_provider_params_json: str = DEFAULT_PROVIDER_PARAMS_JSON
     openrouter_api_key: str = ""
     openrouter_model: str = ""
     openrouter_model_fallback: str = ""
     app_url: str = ""
     llm_time_budget_s: float = 180.0
     llm_max_tokens: int = 12000
+    reply_language: str = "de"
+    plan_layout_path: Path = Path("config/plan_layout.toml")
     finn_mail_address: str = ""
     imap_host: str = "imap.gmail.com"
     imap_port: int = 993
@@ -40,6 +53,25 @@ class Settings(BaseModel):
     cache_dir: Path = Path("cache")
     runs_dir: Path = Path("runs")
 
+    @model_validator(mode="before")
+    @classmethod
+    def _sync_llm_aliases(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        out = dict(data)
+        api_key = out.get("llm_api_key") or out.get("openrouter_api_key") or ""
+        model = out.get("llm_model") or out.get("openrouter_model") or ""
+        fallback = (
+            out.get("llm_model_fallback") or out.get("openrouter_model_fallback") or ""
+        )
+        out["llm_api_key"] = api_key
+        out["openrouter_api_key"] = api_key
+        out["llm_model"] = model
+        out["openrouter_model"] = model
+        out["llm_model_fallback"] = fallback
+        out["openrouter_model_fallback"] = fallback
+        return out
+
     @classmethod
     def from_env(
         cls,
@@ -51,36 +83,57 @@ class Settings(BaseModel):
         if load_env_file:
             load_dotenv(dotenv_path=env_file, override=False)
 
-        mail_user = _clean_env("MAIL_USER")
+        api_key = _clean_env("LLM_API_KEY") or _clean_env("OPENROUTER_API_KEY") or ""
+        model = _clean_env("LLM_MODEL") or _clean_env("OPENROUTER_MODEL") or ""
+        fallback = (
+            _clean_env("LLM_MODEL_FALLBACK")
+            or _clean_env("OPENROUTER_MODEL_FALLBACK")
+            or ""
+        )
+        base_url = _clean_env("LLM_BASE_URL") or DEFAULT_LLM_BASE_URL
+        provider_params_raw = _clean_env("LLM_PROVIDER_PARAMS_JSON")
+        provider_params_json = (
+            DEFAULT_PROVIDER_PARAMS_JSON
+            if provider_params_raw is None
+            else provider_params_raw
+        )
+
+        mail_user = _clean_env("MAIL_USER") or ""
         finn_mail_address = _clean_env("FINN_MAIL_ADDRESS") or mail_user
 
         return cls(
-            openrouter_api_key=_clean_env("OPENROUTER_API_KEY"),
-            openrouter_model=_clean_env("OPENROUTER_MODEL"),
-            openrouter_model_fallback=_clean_env("OPENROUTER_MODEL_FALLBACK"),
-            app_url=_clean_env("APP_URL"),
-            llm_time_budget_s=float(_clean_env("LLM_TIME_BUDGET_S", "180")),
-            llm_max_tokens=int(_clean_env("LLM_MAX_TOKENS", "12000")),
+            llm_base_url=base_url,
+            llm_api_key=api_key,
+            llm_model=model,
+            llm_model_fallback=fallback,
+            llm_provider_params_json=provider_params_json,
+            app_url=_clean_env("APP_URL") or "",
+            llm_time_budget_s=float(_clean_env("LLM_TIME_BUDGET_S") or "180"),
+            llm_max_tokens=int(_clean_env("LLM_MAX_TOKENS") or "12000"),
+            reply_language=_clean_env("REPLY_LANGUAGE") or "de",
+            plan_layout_path=Path(
+                _clean_env("PLAN_LAYOUT") or "config/plan_layout.toml"
+            ),
             finn_mail_address=finn_mail_address,
-            imap_host=_clean_env("IMAP_HOST", "imap.gmail.com"),
-            imap_port=int(_clean_env("IMAP_PORT", "993")),
-            smtp_host=_clean_env("SMTP_HOST", "smtp.gmail.com"),
-            smtp_port=int(_clean_env("SMTP_PORT", "465")),
+            imap_host=_clean_env("IMAP_HOST") or "imap.gmail.com",
+            imap_port=int(_clean_env("IMAP_PORT") or "993"),
+            smtp_host=_clean_env("SMTP_HOST") or "smtp.gmail.com",
+            smtp_port=int(_clean_env("SMTP_PORT") or "465"),
             mail_user=mail_user,
-            mail_app_password=_clean_env("MAIL_APP_PASSWORD"),
-            poll_seconds=int(_clean_env("POLL_SECONDS", "20")),
-            contracts_dir=Path(_clean_env("CONTRACTS_DIR", "data/contracts")),
-            cache_dir=Path(_clean_env("CACHE_DIR", "cache")),
-            runs_dir=Path(_clean_env("RUNS_DIR", "runs")),
+            mail_app_password=_clean_env("MAIL_APP_PASSWORD") or "",
+            poll_seconds=int(_clean_env("POLL_SECONDS") or "20"),
+            contracts_dir=Path(_clean_env("CONTRACTS_DIR") or "data/contracts"),
+            cache_dir=Path(_clean_env("CACHE_DIR") or "cache"),
+            runs_dir=Path(_clean_env("RUNS_DIR") or "runs"),
         )
 
     def require_llm(self) -> None:
-        """Raise ValueError if required OpenRouter LLM configuration is missing."""
+        """Raise ValueError if required LLM configuration is missing."""
         missing: list[str] = []
-        if not self.openrouter_api_key:
-            missing.append("OPENROUTER_API_KEY")
-        if not self.openrouter_model:
-            missing.append("OPENROUTER_MODEL")
+        if not self.llm_api_key:
+            missing.append("LLM_API_KEY (or OPENROUTER_API_KEY)")
+        if not self.llm_model:
+            missing.append("LLM_MODEL (or OPENROUTER_MODEL)")
         if missing:
             raise ValueError(
                 f"Missing required LLM environment variables: {', '.join(missing)}"

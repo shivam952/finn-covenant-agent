@@ -4,19 +4,24 @@ from __future__ import annotations
 
 import json
 import sys
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from finn.fmt import fmt_num, fmt_pct, fmt_teur, round_kaufmaennisch
+from finn.fmt import round_kaufmaennisch
 from finn.models import (
     ContractCovenants,
     Covenant,
+    FormulaParts,
+    FormulaTerm,
     Quantity,
     Result,
     Source,
+    StressResult,
     TermMapping,
 )
 from finn.plan.reader import PlanData, read_plan
+from finn.render import render_stress
 
 
 class CalcError(Exception):
@@ -187,67 +192,63 @@ def _eval_quantity(
     )
 
 
-def _fmt_amount_auto(x: float) -> str:
-    """Format a plan amount in German notation without decimals if integer, else 2 decimals."""
-    if abs(x - round(x)) < 1e-9:
-        return fmt_num(x, 0)
-    return fmt_num(x, 2)
-
-
-def _format_quantity_expr(q_eval: QuantityEval) -> str:
-    """Format a quantity's top-level component traces as a human-readable arithmetic expression."""
-    active = [
-        t for t in q_eval.traces if not (len(t.item_ids) == 0 and abs(t.raw_amount) < 1e-9)
+def _traces_to_formula_terms(traces: list[ComponentTrace]) -> list[FormulaTerm]:
+    return [
+        FormulaTerm(
+            name=t.component_name,
+            sign=1 if t.sign >= 0 else -1,
+            weight=t.weight,
+            amount=t.raw_amount,
+            is_empty_leaf=(t.ref_quantity is None and len(t.item_ids) == 0),
+        )
+        for t in traces
     ]
-    if not active:
-        return "0"
-
-    parts: list[str] = []
-    for idx, t in enumerate(active):
-        amt = t.raw_amount
-        effective_sign = t.sign if amt >= 0 else -t.sign
-        abs_amt_str = _fmt_amount_auto(abs(amt))
-        if abs(t.weight - 1.0) > 1e-9:
-            w_decimals = 1 if abs(t.weight * 10 - round(t.weight * 10)) < 1e-9 else 2
-            term_str = f"{fmt_num(t.weight, w_decimals)} × {abs_amt_str}"
-        else:
-            term_str = abs_amt_str
-
-        if idx == 0:
-            parts.append(f"-{term_str}" if effective_sign < 0 else term_str)
-        else:
-            op = "+" if effective_sign > 0 else "−"
-            parts.append(f"{op} {term_str}")
-
-    joined = " ".join(parts)
-    if len(active) > 1:
-        return f"({joined})"
-    return joined
 
 
-def _build_formula_text(
+def _build_formula_parts(
     cov: Covenant,
     num_eval: QuantityEval,
     den_eval: QuantityEval,
+    scale: float,
     value_raw: float,
     value_reported: float,
-) -> str:
-    num_expr = _format_quantity_expr(num_eval)
-    den_expr = _format_quantity_expr(den_eval)
-    unit_suffix = " %" if cov.unit == "percent" else ""
-    mult_part = " × 100" if cov.unit == "percent" else ""
-    raw_str = f"{fmt_num(value_raw, 4)}{unit_suffix}"
-
-    if cov.rounding_decimals is not None:
-        rep_str = f"{fmt_num(value_reported, cov.rounding_decimals)}{unit_suffix}"
-        return f"{num_expr} / {den_expr}{mult_part} = {raw_str} → gerundet {rep_str}"
-    return f"{num_expr} / {den_expr}{mult_part} = {raw_str}"
+) -> FormulaParts:
+    return FormulaParts(
+        numerator_terms=_traces_to_formula_terms(num_eval.traces),
+        denominator_terms=_traces_to_formula_terms(den_eval.traces),
+        scale=scale,
+        unit=cov.unit,
+        value_raw=value_raw,
+        value_reported=value_reported,
+        rounding_decimals=cov.rounding_decimals,
+    )
 
 
 def _is_raw_met(operator: str, value_raw: float, limit: float) -> bool:
     if operator == ">=":
         return value_raw >= limit
     return value_raw <= limit
+
+
+def _find_closest_earnings_quantity(
+    cov: Covenant,
+    quantities_by_name: dict[str, Quantity],
+) -> str | None:
+    """Return the quantity name with kind == 'earnings' closest to the covenant root via BFS."""
+    queue: deque[str] = deque([cov.numerator, cov.denominator])
+    visited: set[str] = set()
+    while queue:
+        q_name = queue.popleft()
+        if q_name in visited or q_name not in quantities_by_name:
+            continue
+        visited.add(q_name)
+        qty = quantities_by_name[q_name]
+        if qty.kind == "earnings":
+            return q_name
+        for comp in qty.components:
+            if comp.ref is not None and comp.ref not in visited:
+                queue.append(comp.ref)
+    return None
 
 
 def _compute_stress(
@@ -259,38 +260,39 @@ def _compute_stress(
     contract_file: str,
     mappings: list[TermMapping],
     plan: PlanData,
-) -> tuple[float, str]:
-    """Compute stress_value and German stress_text based on value_raw without rounding benefit."""
-    all_used = _dedup_preserve(num_eval.used_quantities + den_eval.used_quantities)
-    ebitda_qty_name = next((q for q in all_used if q.lower() == "ebitda"), None)
-    limit_decimals = cov.rounding_decimals if cov.rounding_decimals is not None else (
-        1 if cov.unit == "percent" else 2
-    )
-    limit_str = (
-        fmt_pct(cov.limit, limit_decimals)
-        if cov.unit == "percent"
-        else fmt_num(cov.limit, limit_decimals)
-    )
-
+) -> tuple[float, StressResult]:
+    """Compute numeric stress_value and structured StressResult based on value_raw without rounding benefit."""
     if not _is_raw_met(cov.operator, value_raw, cov.limit):
         diff = abs(value_raw - cov.limit)
-        diff_str = fmt_pct(diff, 2) if cov.unit == "percent" else fmt_num(diff, 2)
-        direction = "unterschritten" if cov.operator == ">=" else "überschritten"
         return (
             -diff,
-            f"Der Grenzwert von {limit_str} ist bereits um {diff_str} {direction}.",
+            StressResult(
+                kind="already_breached",
+                driver_quantity=cov.name,
+                pct=diff if cov.unit == "percent" else None,
+                amount=diff if cov.unit != "percent" else None,
+                limit=cov.limit,
+                operator=cov.operator,
+                unit=cov.unit,
+                rounding_decimals=cov.rounding_decimals,
+            ),
         )
 
-    if ebitda_qty_name is not None:
-        ebitda_eval = _eval_quantity(
-            ebitda_qty_name, quantities_by_name, contract_file, mappings, plan
+    earnings_qty_name = _find_closest_earnings_quantity(cov, quantities_by_name)
+    if earnings_qty_name is not None:
+        earnings_eval = _eval_quantity(
+            earnings_qty_name, quantities_by_name, contract_file, mappings, plan
         )
-        ebitda_base = ebitda_eval.value
-        if ebitda_base <= 0:
-            raise CalcError("EBITDA-Ausgangswert für den Stresstest muss positiv sein.")
+        earnings_base = earnings_eval.value
+        if earnings_base <= 0:
+            raise CalcError(
+                f"Ausgangswert der Ertragsgröße '{earnings_qty_name}' für den Stresstest muss positiv sein."
+            )
+
+        override_key = earnings_qty_name.lower()
 
         def ratio_at_drop(drop_frac: float) -> float:
-            ov = {"ebitda": ebitda_base * (1.0 - drop_frac)}
+            ov = {override_key: earnings_base * (1.0 - drop_frac)}
             n_ev = _eval_quantity(
                 cov.numerator,
                 quantities_by_name,
@@ -323,39 +325,65 @@ def _compute_stress(
                 hi = mid
 
         drop_pct = 0.5 * (lo + hi) * 100.0
-        drop_teur = ebitda_base * (drop_pct / 100.0)
-        verb = "unterschritten" if cov.operator == ">=" else "überschritten"
-        stress_text = (
-            f"Das EBITDA dürfte um {fmt_pct(drop_pct, 1)} ({fmt_teur(drop_teur, 0)}) sinken, "
-            f"bevor der Grenzwert von {limit_str} {verb} wird."
+        drop_abs = earnings_base * (drop_pct / 100.0)
+        stress_val = round_kaufmaennisch(drop_pct, 2)
+        return (
+            stress_val,
+            StressResult(
+                kind="earnings_decline",
+                driver_quantity=earnings_qty_name,
+                pct=drop_pct,
+                amount=drop_abs,
+                limit=cov.limit,
+                operator=cov.operator,
+                unit=cov.unit,
+                rounding_decimals=cov.rounding_decimals,
+            ),
         )
-        return round_kaufmaennisch(drop_pct, 2), stress_text
 
-    if cov.unit == "percent":
+    has_equity_in_numerator = any(
+        quantities_by_name[q].kind == "equity"
+        for q in num_eval.used_quantities
+        if q in quantities_by_name
+    )
+    if cov.unit == "percent" and has_equity_in_numerator:
         p = cov.limit / 100.0
         if abs(1.0 - p) < 1e-12:
             raise CalcError("Ungültiger Prozent-Grenzwert 100 % für Stresstest.")
-        loss_teur = (num_eval.value - p * den_eval.value) / (1.0 - p)
-        stress_text = (
-            f"Ein zusätzlicher Jahresverlust von {fmt_teur(loss_teur, 0)} würde die Quote "
-            f"unter {limit_str} drücken."
+        loss_abs = (num_eval.value - p * den_eval.value) / (1.0 - p)
+        stress_val = round_kaufmaennisch(loss_abs, 2)
+        return (
+            stress_val,
+            StressResult(
+                kind="equity_loss",
+                driver_quantity=cov.numerator,
+                pct=None,
+                amount=loss_abs,
+                limit=cov.limit,
+                operator=cov.operator,
+                unit=cov.unit,
+                rounding_decimals=cov.rounding_decimals,
+            ),
         )
-        return round_kaufmaennisch(loss_teur, 2), stress_text
 
-    # Fallback for generic ratio without EBITDA
     if cov.operator == ">=":
         delta = num_eval.value - cov.limit * den_eval.value
-        stress_text = (
-            f"Der Zähler dürfte um {fmt_teur(delta, 0)} sinken, "
-            f"bevor der Grenzwert von {limit_str} unterschritten wird."
-        )
     else:
         delta = cov.limit * den_eval.value - num_eval.value
-        stress_text = (
-            f"Der Zähler dürfte um {fmt_teur(delta, 0)} steigen, "
-            f"bevor der Grenzwert von {limit_str} überschritten wird."
-        )
-    return round_kaufmaennisch(delta, 2), stress_text
+    stress_val = round_kaufmaennisch(delta, 2)
+    return (
+        stress_val,
+        StressResult(
+            kind="numerator_change",
+            driver_quantity=cov.numerator,
+            pct=None,
+            amount=delta,
+            limit=cov.limit,
+            operator=cov.operator,
+            unit=cov.unit,
+            rounding_decimals=cov.rounding_decimals,
+        ),
+    )
 
 
 def evaluate_contract(
@@ -363,7 +391,7 @@ def evaluate_contract(
     mappings: list[TermMapping],
     plan: PlanData,
 ) -> list[Result]:
-    """Deterministically evaluate all covenants of a single contract against the 2027 plan."""
+    """Deterministically evaluate all covenants of a single contract against the parsed plan."""
     if not contract.has_covenants:
         return []
 
@@ -409,7 +437,7 @@ def evaluate_contract(
         if cov.rounding_decimals is not None:
             headroom = round_kaufmaennisch(headroom, cov.rounding_decimals)
 
-        stress_value, stress_text = _compute_stress(
+        stress_value, stress_struct = _compute_stress(
             cov,
             num_eval,
             den_eval,
@@ -420,8 +448,8 @@ def evaluate_contract(
             plan,
         )
 
-        formula_text = _build_formula_text(
-            cov, num_eval, den_eval, value_raw, value_reported
+        formula_struct = _build_formula_parts(
+            cov, num_eval, den_eval, scale, value_raw, value_reported
         )
 
         used_qty_names = _dedup_preserve(
@@ -455,9 +483,9 @@ def evaluate_contract(
                 unit=cov.unit,
                 headroom=headroom,
                 met=met,
-                stress_text=stress_text,
                 stress_value=stress_value,
-                formula_text=formula_text,
+                stress=stress_struct,
+                formula=formula_struct,
                 contract_sources=contract_sources,
                 plan_cells=plan_cells,
                 warnings=cov_warnings,
@@ -468,33 +496,45 @@ def evaluate_contract(
 
 
 def _main(argv: list[str]) -> int:
-    xlsx_path = (
-        Path(argv[1])
-        if len(argv) > 1
-        else Path("data/samples/Wirtschaftsplan_2027.xlsx")
-    )
     repo_root = Path(__file__).resolve().parents[2]
+    if len(argv) > 1:
+        xlsx_path = Path(argv[1])
+    else:
+        xlsx_path = sorted((repo_root / "data" / "samples").glob("*.xlsx"))[0]
+
     cov_path = repo_root / "tests" / "fixtures" / "golden_covenants.json"
+    kinds_path = repo_root / "tests" / "fixtures" / "golden_kinds.json"
     map_path = repo_root / "tests" / "fixtures" / "golden_mapping.json"
 
-    contracts = [
-        ContractCovenants.model_validate(c)
-        for c in json.loads(cov_path.read_text(encoding="utf-8"))
-    ]
+    raw_contracts = json.loads(cov_path.read_text(encoding="utf-8"))
+    kinds_overlay: dict[str, dict[str, str]] = (
+        json.loads(kinds_path.read_text(encoding="utf-8"))
+        if kinds_path.exists()
+        else {}
+    )
+    for c_dict in raw_contracts:
+        c_kinds = kinds_overlay.get(c_dict.get("contract_file", ""), {})
+        for q_dict in c_dict.get("quantities", []):
+            if q_dict.get("name") in c_kinds:
+                q_dict["kind"] = c_kinds[q_dict["name"]]
+
+    contracts = [ContractCovenants.model_validate(c) for c in raw_contracts]
     mappings = [
         TermMapping.model_validate(m)
         for m in json.loads(map_path.read_text(encoding="utf-8"))
     ]
     plan = read_plan(xlsx_path)
+    unit = str(plan.meta.get("amount_unit", ""))
 
-    header = f"{'covenant id':<10} | {'value_raw':>10} | {'value_reported':>14} | {'limit':>8} | {'headroom':>10} | {'met':<5} | stress_text"
+    header = f"{'covenant id':<10} | {'value_raw':>10} | {'value_reported':>14} | {'limit':>8} | {'headroom':>10} | {'met':<5} | stress"
     print(header)
     print("-" * len(header))
     for contract in contracts:
         for r in evaluate_contract(contract, mappings, plan):
+            stress_str = render_stress(r.stress, lang="de", unit=unit)
             print(
                 f"{r.covenant_id:<10} | {r.value_raw:>10.4f} | {r.value_reported:>14.4f} | "
-                f"{r.limit:>8.2f} | {r.headroom:>10.4f} | {str(r.met):<5} | {r.stress_text}"
+                f"{r.limit:>8.2f} | {r.headroom:>10.4f} | {str(r.met):<5} | {stress_str}"
             )
     return 0
 

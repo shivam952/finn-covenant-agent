@@ -1,0 +1,18 @@
+[stress]
+earnings_decline_ge = "{driver} could fall by {pct} ({amount}) before breaching the minimum limit of {limit}."
+earnings_decline_le = "{driver} could fall by {pct} ({amount}) before breaching the maximum limit of {limit}."
+equity_loss = "An additional annual loss of {amount} would push the ratio below {limit}."
+numerator_change_ge = "The numerator ({driver}) could fall by {amount} before breaching the limit of {limit}."
+numerator_change_le = "The numerator ({driver}) could rise by {amount} before breaching the limit of {limit}."
+already_breached_ge = "The minimum limit of {limit} is already breached by {diff}."
+already_breached_le = "The maximum limit of {limit} is already breached by {diff}."
+
+[formula]
+rounded = "{lhs} = {raw} → rounded {reported}"
+exact = "{lhs} = {raw}"
+
+[checks]
+check_passed = "Plausibility check '{id}' passed ({lhs} = {rhs})."
+check_failed = "Plausibility check '{id}' failed ({description}): {lhs} != {rhs}."
+check_skipped = "Plausibility check '{id}' skipped ({description}): {reason}."
+formula_cache_mismatch = "Mismatch between evaluated formula value ({evaluated}) and cached value ({cached}) in {cell}; using evaluated value."

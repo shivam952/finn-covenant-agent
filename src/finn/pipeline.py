@@ -17,6 +17,7 @@ from finn.llm import JsonLLM, make_llm
 from finn.mapping import map_terms
 from finn.models import ContractCovenants, Result, RunReport, TermMapping
 from finn.plan.reader import plan_item_catalog, read_plan
+from finn.render import render_check
 
 
 def generate_run_id() -> str:
@@ -81,6 +82,8 @@ def run_check(xlsx_path: Path, ctx: RunContext) -> RunOutcome:
     plan = read_plan(xlsx_path)
     plan_duration_s = round(time.monotonic() - t0, 3)
     catalog_with_values = plan_item_catalog(plan, include_values=True)
+    amount_unit = str(plan.meta.get("amount_unit", ""))
+    lang = ctx.settings.reply_language
 
     # Step 2: Extract covenants from all contracts (cached)
     t0 = time.monotonic()
@@ -92,7 +95,11 @@ def run_check(xlsx_path: Path, ctx: RunContext) -> RunOutcome:
     all_mappings: list[TermMapping] = []
     mapping_step_records: list[dict[str, Any]] = []
     contracts_without_covenants: list[ContractCovenants] = []
-    prefixed_warnings: list[str] = list(plan.checks)
+    prefixed_warnings: list[str] = [
+        render_check(c, lang=lang, unit=amount_unit)
+        for c in plan.checks
+        if (not c.passed) or c.skipped
+    ]
 
     for contract, ext_meta in extracted_pairs:
         for w in ext_meta.get("warnings", []):
@@ -145,7 +152,7 @@ def run_check(xlsx_path: Path, ctx: RunContext) -> RunOutcome:
             "read_plan": {
                 "duration_s": plan_duration_s,
                 "meta": plan.meta,
-                "checks": plan.checks,
+                "checks": [c.model_dump(mode="json") for c in plan.checks],
                 "catalog_with_values": catalog_with_values,
             },
             "extract_covenants": {

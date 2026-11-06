@@ -1,4 +1,4 @@
-"""Excel workbook reader for extracting Plan 2027 items from Wirtschaftsplan_2027.xlsx."""
+"""Excel workbook reader for extracting business plan items and evaluating formulas."""
 
 from __future__ import annotations
 
@@ -12,7 +12,9 @@ from openpyxl.worksheet.worksheet import Worksheet
 from pydantic import BaseModel, Field
 
 from finn.fmt import fmt_num
-from finn.models import PlanItem
+from finn.models import CheckResult, PlanItem
+from finn.plan.checks import evaluate_checks
+from finn.plan.layout import PlanLayoutConfig, RoleConfig, load_plan_layout
 
 
 class PlanFormatError(Exception):
@@ -20,10 +22,10 @@ class PlanFormatError(Exception):
 
 
 class PlanData(BaseModel):
-    """Parsed 2027 business plan items, plausibility check warnings, and metadata."""
+    """Parsed business plan items, structured check results, and metadata."""
 
     items: dict[str, PlanItem]
-    checks: list[str] = Field(default_factory=list)
+    checks: list[CheckResult] = Field(default_factory=list)
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -106,7 +108,7 @@ class _WorkbookEvaluator:
         self.memo: dict[tuple[str, str], float] = {}
         self.direct_deps: dict[tuple[str, str], list[tuple[str, str]]] = {}
         self.checked_cache: set[tuple[str, str]] = set()
-        self.warnings: list[str] = []
+        self.cache_checks: list[CheckResult] = []
 
     def _resolve_sheet(self, name: str, origin_cell: str) -> str:
         key = name.strip().lower()
@@ -182,10 +184,22 @@ class _WorkbookEvaluator:
         ):
             self.checked_cache.add(key)
             if abs(total - float(cached)) > 0.5:
-                self.warnings.append(
-                    f"Abweichung zwischen berechnetem Formelwert ({fmt_num(total, 2)}) und "
-                    f"gespeichertem Cache-Wert ({fmt_num(float(cached), 2)}) in {sheet}!{coord_up}; "
-                    f"es wird der berechnete Wert verwendet."
+                cell_ref = f"{sheet}!{coord_up}"
+                self.cache_checks.append(
+                    CheckResult(
+                        id=f"cache_{sheet}_{coord_up}",
+                        description=f"Formel-Cache {cell_ref}",
+                        passed=False,
+                        skipped=False,
+                        lhs=total,
+                        rhs=float(cached),
+                        message_key="formula_cache_mismatch",
+                        params={
+                            "cell": cell_ref,
+                            "evaluated": total,
+                            "cached": float(cached),
+                        },
+                    )
                 )
 
         self.memo[key] = total
@@ -269,44 +283,6 @@ class _WorkbookEvaluator:
         return ordered
 
 
-def _find_plan_column(ws: Worksheet, sheet_label: str, mode: str) -> tuple[int, int, str]:
-    """Scan first 10 rows to locate (header_row, col_index, header_text) for the 2027 plan column."""
-    max_scan_row = min(10, ws.max_row)
-    for r in range(1, max_scan_row + 1):
-        for c in range(1, ws.max_column + 1):
-            val = ws.cell(r, c).value
-            if not isinstance(val, str):
-                continue
-            cleaned = val.strip()
-            low = cleaned.lower()
-            if mode == "guv" and "plan 2027" in low:
-                return r, c, cleaned
-            if mode == "bilanz" and "2027" in low and "plan" in low:
-                return r, c, cleaned
-
-    raise PlanFormatError(
-        f"Im Blatt „{sheet_label}“ wurde keine Spalte „Plan 2027“ gefunden."
-    )
-
-
-def _find_finanzierung_headers(ws: Worksheet) -> tuple[int, list[tuple[int, str]]]:
-    """Locate the header row and numeric columns (B..G) on the Finanzierung sheet."""
-    max_scan_row = min(10, ws.max_row)
-    for r in range(1, max_scan_row + 1):
-        col_a = ws.cell(r, 1).value
-        headers: list[tuple[int, str]] = []
-        for c in range(2, min(ws.max_column, 7) + 1):
-            h_val = ws.cell(r, c).value
-            if isinstance(h_val, str) and h_val.strip():
-                headers.append((c, h_val.strip()))
-        if (isinstance(col_a, str) and "darlehen" in col_a.lower() and headers) or len(headers) >= 3:
-            return r, headers
-
-    raise PlanFormatError(
-        "Im Blatt „Finanzierung“ wurde keine gültige Kopfzeile für den Darlehensspiegel 2027 gefunden."
-    )
-
-
 def _is_numeric_or_formula(val: Any) -> bool:
     if val is None or isinstance(val, bool):
         return False
@@ -317,100 +293,165 @@ def _is_numeric_or_formula(val: Any) -> bool:
     return False
 
 
-def _find_item_by_keywords(
-    items: dict[str, PlanItem],
-    sheet: str,
-    include_keywords: list[str],
-    exclude_keywords: list[str] | None = None,
-) -> PlanItem | None:
-    excl = [k.lower() for k in (exclude_keywords or [])]
-    incl = [k.lower() for k in include_keywords]
-    for item in items.values():
-        if item.sheet != sheet:
-            continue
-        lbl = item.label.lower()
-        if all(k in lbl for k in incl) and not any(k in lbl for k in excl):
-            return item
-    return None
+def _resolve_role_sheet(
+    role_name: str,
+    role_cfg: RoleConfig,
+    wb_f: openpyxl.Workbook,
+) -> str:
+    """Resolve the workbook sheet name for a configured role via aliases or content keywords."""
+    lower_to_actual = {name.lower(): name for name in wb_f.sheetnames}
+    for alias in role_cfg.sheet_aliases:
+        actual = lower_to_actual.get(alias.lower())
+        if actual is not None:
+            return actual
 
+    # Fallback: score each sheet by how many content_keywords appear in column A
+    keywords = [kw.lower() for kw in role_cfg.content_keywords]
+    scores: dict[str, int] = {}
+    for sheet_name in wb_f.sheetnames:
+        ws = wb_f[sheet_name]
+        col_a_texts: list[str] = []
+        for r in range(1, ws.max_row + 1):
+            val = ws.cell(r, 1).value
+            if isinstance(val, str) and val.strip():
+                col_a_texts.append(val.strip().lower())
+        joined = "\n".join(col_a_texts)
+        score = sum(1 for kw in keywords if kw in joined)
+        if score > 0:
+            scores[sheet_name] = score
 
-def _run_plausibility_checks(items: dict[str, PlanItem], checks: list[str]) -> None:
-    """Run the 4 domain plausibility checks and append German warnings on mismatch or missing rows."""
-    # a) Bilanz: Summe Aktiva == Summe Passiva
-    aktiva = _find_item_by_keywords(items, "Bilanz", ["summe aktiva"])
-    passiva = _find_item_by_keywords(items, "Bilanz", ["summe passiva"])
-    if aktiva is None or passiva is None:
-        checks.append(
-            "Plausibilitätsprüfung (a) übersprungen: „Summe Aktiva“ oder „Summe Passiva“ in der Bilanz nicht gefunden."
+    if not scores:
+        found = ", ".join(wb_f.sheetnames)
+        raise PlanFormatError(
+            f"Für die Rolle „{role_name}“ konnte kein passendes Tabellenblatt ermittelt werden "
+            f"(vorhandene Blätter: {found})."
         )
-    elif abs(aktiva.value - passiva.value) > 1e-2:
-        checks.append(
-            f"Bilanz-Ungleichgewicht: Summe Aktiva ({fmt_num(aktiva.value, 0)} T€) weicht von "
-            f"Summe Passiva ({fmt_num(passiva.value, 0)} T€) ab."
-        )
 
-    # b) Finanzierung: "Summe Kreditinstitute – Stand 31.12.2027" == Bilanz "Verbindlichkeiten gegenüber Kreditinstituten"
-    fin_ki = _find_item_by_keywords(
-        items, "Finanzierung", ["summe kreditinstitute", "stand 31.12.2027"]
+    best_score = max(scores.values())
+    winners = [s for s, sc in scores.items() if sc == best_score]
+    if len(winners) > 1:
+        found = ", ".join(wb_f.sheetnames)
+        raise PlanFormatError(
+            f"Mehrdeutige Blatt-Zuordnung für Rolle „{role_name}“ zwischen {winners} "
+            f"(vorhandene Blätter: {found})."
+        )
+    return winners[0]
+
+
+def _scan_sheet_headers(ws: Worksheet, max_rows: int = 10) -> list[tuple[int, int, str]]:
+    """Return (row, col, text) for all non-empty string cells in the first max_rows rows."""
+    out: list[tuple[int, int, str]] = []
+    limit = min(max_rows, ws.max_row)
+    for r in range(1, limit + 1):
+        for c in range(1, ws.max_column + 1):
+            val = ws.cell(r, c).value
+            if isinstance(val, str) and val.strip():
+                out.append((r, c, val.strip()))
+    return out
+
+
+def _detect_years_on_sheet(ws: Worksheet, patterns: list[str]) -> set[int]:
+    """Extract all 4-digit years matching any plan-column pattern in the top rows of ws."""
+    compiled = [
+        re.compile(pat.replace("{year}", r"(?P<year>\d{4})"), re.IGNORECASE)
+        for pat in patterns
+    ]
+    years: set[int] = set()
+    for _, _, text in _scan_sheet_headers(ws):
+        for rx in compiled:
+            for m in rx.finditer(text):
+                years.add(int(m.group("year")))
+    return years
+
+
+def _find_plan_column_for_year(
+    ws: Worksheet,
+    sheet_name: str,
+    plan_year: int,
+    patterns: list[str],
+) -> tuple[int, int, str]:
+    """Locate (header_row, col_index, header_text) matching plan_year on ws."""
+    year_str = re.escape(str(plan_year))
+    compiled = [
+        re.compile(pat.replace("{year}", year_str), re.IGNORECASE)
+        for pat in patterns
+    ]
+    headers = _scan_sheet_headers(ws)
+    for r, c, text in headers:
+        if any(rx.search(text) for rx in compiled):
+            return r, c, text
+
+    found_headers = [t for _, col, t in headers if col >= 2]
+    raise PlanFormatError(
+        f"Im Blatt „{sheet_name}“ wurde keine Planspalte für das Jahr {plan_year} gefunden "
+        f"(gefundene Spaltenköpfe: {', '.join(found_headers) if found_headers else 'keine'})."
     )
-    bil_ki = _find_item_by_keywords(
-        items, "Bilanz", ["verbindlichkeiten gegenüber kreditinstituten"]
-    )
-    if fin_ki is None or bil_ki is None:
-        checks.append(
-            "Plausibilitätsprüfung (b) übersprungen: Abgleichzeilen für Verbindlichkeiten gegenüber Kreditinstituten nicht gefunden."
-        )
-    elif abs(fin_ki.value - bil_ki.value) > 1e-2:
-        checks.append(
-            f"Abweichung Kreditinstitute: Darlehensspiegel ({fmt_num(fin_ki.value, 0)} T€) != "
-            f"Bilanz ({fmt_num(bil_ki.value, 0)} T€)."
-        )
 
-    # c) GuV "Zinsen und ähnliche Aufwendungen" minus "davon … Aufzinsung" == Finanzierung "Summe Darlehen gesamt – Zinsaufwand 2027"
-    guv_zins = _find_item_by_keywords(
-        items, "GuV", ["zinsen und ähnliche aufwendungen"], ["abgleich"]
-    )
-    guv_aufz = _find_item_by_keywords(items, "GuV", ["davon", "aufzinsung"])
-    fin_zins = _find_item_by_keywords(
-        items, "Finanzierung", ["summe darlehen gesamt", "zinsaufwand 2027"]
-    )
-    if guv_zins is None or guv_aufz is None or fin_zins is None:
-        checks.append(
-            "Plausibilitätsprüfung (c) übersprungen: Zeilen für den Zinsaufwands-Abgleich zwischen GuV und Finanzierung nicht gefunden."
-        )
-    elif abs((guv_zins.value - guv_aufz.value) - fin_zins.value) > 1e-2:
-        checks.append(
-            f"Abweichung Zinsaufwand: GuV Zinsaufwand abzgl. Aufzinsung "
-            f"({fmt_num(guv_zins.value - guv_aufz.value, 0)} T€) != "
-            f"Darlehensspiegel Zinsaufwand ({fmt_num(fin_zins.value, 0)} T€)."
-        )
 
-    # d) EBITDA identity: Jahresüberschuss + Steuern + Zinsaufwand − Zinserträge + Abschreibungen == Betriebsergebnis + Abschreibungen
-    jue = _find_item_by_keywords(items, "GuV", ["jahresüberschuss"])
-    steuern = _find_item_by_keywords(items, "GuV", ["steuern vom einkommen"])
-    zinsertr = _find_item_by_keywords(items, "GuV", ["zinsen und ähnliche erträge"])
-    abschr = _find_item_by_keywords(items, "GuV", ["abschreibungen"])
-    ebit = _find_item_by_keywords(items, "GuV", ["betriebsergebnis"])
-    if any(x is None for x in (jue, steuern, guv_zins, zinsertr, abschr, ebit)):
-        checks.append(
-            "Plausibilitätsprüfung (d) übersprungen: Nicht alle GuV-Zeilen für die EBITDA-Identität gefunden."
-        )
-    else:
-        assert jue and steuern and guv_zins and zinsertr and abschr and ebit
-        lhs = jue.value + steuern.value + guv_zins.value - zinsertr.value + abschr.value
-        rhs = ebit.value + abschr.value
-        if abs(lhs - rhs) > 1e-2:
-            checks.append(
-                f"EBITDA-Identität verletzt: Bottom-up ({fmt_num(lhs, 0)} T€) != "
-                f"Top-down ({fmt_num(rhs, 0)} T€)."
+def _find_all_numeric_columns(
+    ws: Worksheet,
+    sheet_name: str,
+) -> tuple[int, list[tuple[int, str]]]:
+    """Locate the header row and all columns (c >= 2) with headers and numeric/formula cells below."""
+    max_scan_row = min(10, ws.max_row)
+    best_row: int | None = None
+    best_headers: list[tuple[int, str]] = []
+
+    for r in range(1, max_scan_row + 1):
+        candidate: list[tuple[int, str]] = []
+        for c in range(2, ws.max_column + 1):
+            h_val = ws.cell(r, c).value
+            if not isinstance(h_val, str) or not h_val.strip():
+                continue
+            has_numeric_below = any(
+                _is_numeric_or_formula(ws.cell(data_r, c).value)
+                for data_r in range(r + 1, ws.max_row + 1)
             )
+            if has_numeric_below:
+                candidate.append((c, h_val.strip()))
+        if len(candidate) > len(best_headers):
+            best_row = r
+            best_headers = candidate
+
+    if best_row is None or not best_headers:
+        raise PlanFormatError(
+            f"Im Blatt „{sheet_name}“ wurde keine gültige Kopfzeile mit numerischen Datenspalten gefunden."
+        )
+    return best_row, best_headers
 
 
-def read_plan(path: Path) -> PlanData:
-    """Read Wirtschaftsplan_2027.xlsx, evaluate formulas, normalise signs, and run plausibility checks."""
+def _detect_amount_unit(
+    wb_f: openpyxl.Workbook,
+    layout: PlanLayoutConfig,
+) -> str:
+    """Return configured amount_unit, or detect from cover sheet if layout.amount_unit is empty."""
+    if layout.amount_unit:
+        return layout.amount_unit
+    if layout.cover_unit_pattern:
+        rx = re.compile(layout.cover_unit_pattern, re.IGNORECASE)
+        for sheet_name in wb_f.sheetnames:
+            ws = wb_f[sheet_name]
+            for r in range(1, min(25, ws.max_row) + 1):
+                for c in range(1, min(10, ws.max_column) + 1):
+                    val = ws.cell(r, c).value
+                    if isinstance(val, str):
+                        m = rx.search(val)
+                        if m:
+                            return m.group(1).strip()
+    return ""
+
+
+def read_plan(
+    path: Path,
+    plan_year: int | None = None,
+    layout_path: Path | None = None,
+) -> PlanData:
+    """Read a business plan workbook, evaluate formulas, normalise signs, and run checks."""
     path = Path(path)
     if not path.exists():
         raise PlanFormatError(f"Die Wirtschaftsplan-Datei „{path}“ wurde nicht gefunden.")
+
+    layout = load_plan_layout(layout_path)
 
     try:
         wb_f = openpyxl.load_workbook(path, data_only=False)
@@ -420,128 +461,157 @@ def read_plan(path: Path) -> PlanData:
             f"Die Wirtschaftsplan-Datei „{path.name}“ konnte nicht als Excel-Arbeitsmappe geöffnet werden: {exc}"
         ) from exc
 
-    required_sheets = ["GuV", "Bilanz", "Finanzierung"]
-    lower_to_actual = {name.lower(): name for name in wb_f.sheetnames}
-
     canonical_map: dict[str, str] = {}
     sheets_f: dict[str, Worksheet] = {}
     sheets_v: dict[str, Worksheet] = {}
+    for sname in wb_f.sheetnames:
+        canonical_map[sname.lower()] = sname
+        sheets_f[sname] = wb_f[sname]
+        sheets_v[sname] = wb_v[sname]
 
-    for req in required_sheets:
-        actual = lower_to_actual.get(req.lower())
-        if actual is None:
-            raise PlanFormatError(f"Im Wirtschaftsplan fehlt das Blatt „{req}“.")
-        canonical_map[req.lower()] = req
-        canonical_map[actual.lower()] = req
-        sheets_f[req] = wb_f[actual]
-        sheets_v[req] = wb_v[actual]
+    role_to_sheet: dict[str, str] = {}
+    for role_name, role_cfg in layout.roles.items():
+        actual_sheet = _resolve_role_sheet(role_name, role_cfg, wb_f)
+        role_to_sheet[role_name] = actual_sheet
+        for alias in role_cfg.sheet_aliases:
+            canonical_map.setdefault(alias.lower(), actual_sheet)
+
+    # Determine plan_year across all roles with column_mode == "plan_year"
+    plan_year_roles = [
+        (r_name, role_to_sheet[r_name])
+        for r_name, r_cfg in layout.roles.items()
+        if r_cfg.column_mode == "plan_year"
+    ]
+    if plan_year is None:
+        year_sets: list[set[int]] = []
+        found_headers_by_sheet: dict[str, list[str]] = {}
+        for _, sname in plan_year_roles:
+            ws = sheets_f[sname]
+            year_sets.append(_detect_years_on_sheet(ws, layout.plan_column.patterns))
+            found_headers_by_sheet[sname] = [
+                t for _, col, t in _scan_sheet_headers(ws) if col >= 2
+            ]
+        common_years = set.intersection(*year_sets) if year_sets else set()
+        if not common_years:
+            details = "; ".join(
+                f"{s}: {', '.join(h) if h else 'keine'}"
+                for s, h in found_headers_by_sheet.items()
+            )
+            raise PlanFormatError(
+                f"Es konnte kein gemeinsames Planjahr erkannt werden (gefundene Spaltenköpfe: {details})."
+            )
+        target_year = max(common_years)
+    else:
+        target_year = plan_year
 
     evaluator = _WorkbookEvaluator(sheets_f, sheets_v, canonical_map)
     items: dict[str, PlanItem] = {}
+    sheet_headers: dict[str, str] = {}
+    role_column_meta: dict[str, Any] = {}
 
-    # 1. GuV
-    ws_guv = sheets_f["GuV"]
-    guv_header_row, guv_col, guv_header = _find_plan_column(ws_guv, "GuV", "guv")
-    guv_col_letter = get_column_letter(guv_col)
-    for r in range(guv_header_row + 1, ws_guv.max_row + 1):
-        label_raw = ws_guv.cell(r, 1).value
-        if not isinstance(label_raw, str) or not label_raw.strip():
-            continue
-        cell_val = ws_guv.cell(r, guv_col).value
-        if not _is_numeric_or_formula(cell_val):
-            continue
-        coord = f"{guv_col_letter}{r}"
-        raw_value = evaluator.eval_cell("GuV", coord)
-        is_formula = isinstance(cell_val, str) and cell_val.strip().startswith("=")
-        is_expense = (not is_formula) and (raw_value < 0)
-        norm_value = abs(raw_value) if is_expense else raw_value
-        item_id = f"GuV!{coord}"
-        items[item_id] = PlanItem(
-            id=item_id,
-            label=label_raw.strip(),
-            sheet="GuV",
-            cell=coord,
-            raw_value=raw_value,
-            value=norm_value,
-            is_expense=is_expense,
-            is_total=is_formula,
-        )
+    for role_name, role_cfg in layout.roles.items():
+        sheet_name = role_to_sheet[role_name]
+        ws = sheets_f[sheet_name]
 
-    # 2. Bilanz
-    ws_bil = sheets_f["Bilanz"]
-    bil_header_row, bil_col, bil_header = _find_plan_column(ws_bil, "Bilanz", "bilanz")
-    bil_col_letter = get_column_letter(bil_col)
-    for r in range(bil_header_row + 1, ws_bil.max_row + 1):
-        label_raw = ws_bil.cell(r, 1).value
-        if not isinstance(label_raw, str) or not label_raw.strip():
-            continue
-        cell_val = ws_bil.cell(r, bil_col).value
-        if not _is_numeric_or_formula(cell_val):
-            continue
-        coord = f"{bil_col_letter}{r}"
-        raw_value = evaluator.eval_cell("Bilanz", coord)
-        is_formula = isinstance(cell_val, str) and cell_val.strip().startswith("=")
-        item_id = f"Bilanz!{coord}"
-        items[item_id] = PlanItem(
-            id=item_id,
-            label=label_raw.strip(),
-            sheet="Bilanz",
-            cell=coord,
-            raw_value=raw_value,
-            value=raw_value,
-            is_expense=False,
-            is_total=is_formula,
-        )
-
-    # 3. Finanzierung
-    ws_fin = sheets_f["Finanzierung"]
-    fin_header_row, fin_headers = _find_finanzierung_headers(ws_fin)
-    for r in range(fin_header_row + 1, ws_fin.max_row + 1):
-        label_raw = ws_fin.cell(r, 1).value
-        if not isinstance(label_raw, str) or not label_raw.strip():
-            continue
-        row_label = label_raw.strip()
-        for c, col_header in fin_headers:
-            cell_val = ws_fin.cell(r, c).value
-            if not _is_numeric_or_formula(cell_val):
-                continue
-            coord = f"{get_column_letter(c)}{r}"
-            raw_value = evaluator.eval_cell("Finanzierung", coord)
-            is_formula = isinstance(cell_val, str) and cell_val.strip().startswith("=")
-            item_id = f"Finanzierung!{coord}"
-            items[item_id] = PlanItem(
-                id=item_id,
-                label=f"{row_label} – {col_header}",
-                sheet="Finanzierung",
-                cell=coord,
-                raw_value=raw_value,
-                value=raw_value,
-                is_expense=False,
-                is_total=is_formula,
+        if role_cfg.column_mode == "plan_year":
+            header_row, col_idx, header_text = _find_plan_column_for_year(
+                ws, sheet_name, target_year, layout.plan_column.patterns
             )
+            col_letter = get_column_letter(col_idx)
+            sheet_headers[sheet_name] = (
+                f"{sheet_name} – Spalte {header_text} (Spalte {col_letter})"
+            )
+            role_column_meta[role_name] = f"{col_letter} ({header_text})"
 
-    # Populate transitive depends_on for all formula PlanItems
+            for r in range(header_row + 1, ws.max_row + 1):
+                label_raw = ws.cell(r, 1).value
+                if not isinstance(label_raw, str) or not label_raw.strip():
+                    continue
+                cell_val = ws.cell(r, col_idx).value
+                if not _is_numeric_or_formula(cell_val):
+                    continue
+                coord = f"{col_letter}{r}"
+                raw_value = evaluator.eval_cell(sheet_name, coord)
+                is_formula = isinstance(cell_val, str) and cell_val.strip().startswith("=")
+                is_expense = (
+                    role_cfg.normalise_expenses
+                    and (not is_formula)
+                    and (raw_value < 0)
+                )
+                norm_value = abs(raw_value) if is_expense else raw_value
+                item_id = f"{sheet_name}!{coord}"
+                items[item_id] = PlanItem(
+                    id=item_id,
+                    label=label_raw.strip(),
+                    sheet=sheet_name,
+                    role=role_name,
+                    cell=coord,
+                    raw_value=raw_value,
+                    value=norm_value,
+                    is_expense=is_expense,
+                    is_total=is_formula,
+                )
+        else:
+            header_row, col_headers = _find_all_numeric_columns(ws, sheet_name)
+            sheet_headers[sheet_name] = (
+                f"{sheet_name} – (Spalten "
+                + ", ".join(f"{get_column_letter(c)}: {h}" for c, h in col_headers)
+                + ")"
+            )
+            role_column_meta[role_name] = [
+                f"{get_column_letter(c)} ({h})" for c, h in col_headers
+            ]
+
+            for r in range(header_row + 1, ws.max_row + 1):
+                label_raw = ws.cell(r, 1).value
+                if not isinstance(label_raw, str) or not label_raw.strip():
+                    continue
+                row_label = label_raw.strip()
+                for c, col_header in col_headers:
+                    cell_val = ws.cell(r, c).value
+                    if not _is_numeric_or_formula(cell_val):
+                        continue
+                    coord = f"{get_column_letter(c)}{r}"
+                    raw_value = evaluator.eval_cell(sheet_name, coord)
+                    is_formula = isinstance(cell_val, str) and cell_val.strip().startswith("=")
+                    is_expense = (
+                        role_cfg.normalise_expenses
+                        and (not is_formula)
+                        and (raw_value < 0)
+                    )
+                    norm_value = abs(raw_value) if is_expense else raw_value
+                    item_id = f"{sheet_name}!{coord}"
+                    items[item_id] = PlanItem(
+                        id=item_id,
+                        label=f"{row_label} – {col_header}",
+                        sheet=sheet_name,
+                        role=role_name,
+                        cell=coord,
+                        raw_value=raw_value,
+                        value=norm_value,
+                        is_expense=is_expense,
+                        is_total=is_formula,
+                    )
+
     known_ids = set(items.keys())
     for item_id, item in list(items.items()):
         if item.is_total:
             deps = evaluator.transitive_dependencies(item.sheet, item.cell, known_ids)
             items[item_id] = item.model_copy(update={"depends_on": deps})
 
-    checks = list(evaluator.warnings)
-    _run_plausibility_checks(items, checks)
+    checks: list[CheckResult] = list(evaluator.cache_checks)
+    checks.extend(evaluate_checks(items, layout.checks, target_year))
+
+    amount_unit = _detect_amount_unit(wb_f, layout)
 
     meta: dict[str, Any] = {
         "file": path.name,
-        "guv_plan_column": f"{guv_col_letter} ({guv_header})",
-        "bilanz_plan_column": f"{bil_col_letter} ({bil_header})",
-        "finanzierung_columns": [f"{get_column_letter(c)} ({h})" for c, h in fin_headers],
-        "sheet_headers": {
-            "GuV": f"GuV – Spalte {guv_header} (Spalte {guv_col_letter})",
-            "Bilanz": f"Bilanz – Spalte {bil_header} (Spalte {bil_col_letter})",
-            "Finanzierung": "Finanzierung – Darlehensspiegel 2027 (Spalten "
-            + ", ".join(f"{get_column_letter(c)}: {h}" for c, h in fin_headers)
-            + ")",
-        },
+        "plan_year": target_year,
+        "test_date": f"31.12.{target_year}",
+        "amount_unit": amount_unit,
+        "role_sheets": role_to_sheet,
+        "role_columns": role_column_meta,
+        "sheet_headers": sheet_headers,
         "item_count": len(items),
     }
 
@@ -551,13 +621,14 @@ def read_plan(path: Path) -> PlanData:
 def plan_item_catalog(plan: PlanData, include_values: bool = False) -> str:
     """Format PlanItems grouped by sheet. Default omits numeric values so LLM maps by meaning only."""
     sheet_headers: dict[str, str] = plan.meta.get("sheet_headers", {})
+    plan_year = plan.meta.get("plan_year", "")
     by_sheet: dict[str, list[PlanItem]] = {}
     for item in plan.items.values():
         by_sheet.setdefault(item.sheet, []).append(item)
 
     blocks: list[str] = []
     for sheet, sheet_items in by_sheet.items():
-        header = sheet_headers.get(sheet, f"{sheet} – Spalte Plan 2027")
+        header = sheet_headers.get(sheet, f"{sheet} – Plan {plan_year}".strip())
         lines: list[str] = [f"=== {header} ==="]
         for item in sheet_items:
             parts = [item.id, item.sheet, item.label]

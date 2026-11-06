@@ -26,18 +26,26 @@ SAMPLES_DIR = REPO_ROOT / "data" / "samples"
 CONTRACTS_DIR = REPO_ROOT / "data" / "contracts"
 EXPECTED_PATH = REPO_ROOT / "tests" / "expected_2027.json"
 GOLDEN_COVENANTS_PATH = REPO_ROOT / "tests" / "fixtures" / "golden_covenants.json"
+GOLDEN_KINDS_PATH = REPO_ROOT / "tests" / "fixtures" / "golden_kinds.json"
 GOLDEN_MAPPING_PATH = REPO_ROOT / "tests" / "fixtures" / "golden_mapping.json"
 
 
 class GoldenFakeLLM:
-    """Fake JsonLLM that returns golden extraction and mapping fixtures without network access."""
+    """Fake JsonLLM that returns golden extraction (with kinds overlay) and mapping fixtures without network access."""
 
     model_name = "fake-golden-llm"
 
     def __init__(self) -> None:
+        raw_contracts = json.loads(GOLDEN_COVENANTS_PATH.read_text(encoding="utf-8"))
+        kinds_overlay = json.loads(GOLDEN_KINDS_PATH.read_text(encoding="utf-8"))
+        for c_dict in raw_contracts:
+            c_kinds = kinds_overlay.get(c_dict["contract_file"], {})
+            for q_dict in c_dict["quantities"]:
+                if q_dict["name"] in c_kinds:
+                    q_dict["kind"] = c_kinds[q_dict["name"]]
         self.contracts = {
             c["contract_file"]: ContractCovenants.model_validate(c)
-            for c in json.loads(GOLDEN_COVENANTS_PATH.read_text(encoding="utf-8"))
+            for c in raw_contracts
         }
         self.mappings = [
             TermMapping.model_validate(m)
@@ -87,8 +95,8 @@ def test_run_check_produces_expected_results_and_redacts_secrets_in_audit(
     secret_key = "sk-or-v1-TOP-SECRET-DO-NOT-LEAK-99999"
     secret_pw = "gmail-app-password-SUPER-SECRET-88888"
     settings = Settings(
-        openrouter_api_key=secret_key,
-        openrouter_model="fake-golden-llm",
+        llm_api_key=secret_key,
+        llm_model="fake-golden-llm",
         mail_app_password=secret_pw,
         contracts_dir=CONTRACTS_DIR,
         cache_dir=tmp_path / "cache",
@@ -106,6 +114,7 @@ def test_run_check_produces_expected_results_and_redacts_secrets_in_audit(
         report.contracts_without_covenants[0].contract_file
         == "Vertrag_1_Sparkasse_Investitionsdarlehen.pdf"
     )
+    assert report.warnings == []
 
     expected = json.loads(EXPECTED_PATH.read_text(encoding="utf-8"))
     by_name = {r.covenant_name: r for r in report.results}
@@ -137,6 +146,7 @@ def test_run_check_produces_expected_results_and_redacts_secrets_in_audit(
     audit_text = audit_path.read_text(encoding="utf-8")
     assert secret_key not in audit_text
     assert secret_pw not in audit_text
+    assert "llm_api_key" not in audit_text
     assert "openrouter_api_key" not in audit_text
     assert "mail_app_password" not in audit_text
 
@@ -148,8 +158,8 @@ def test_cli_finn_run_eml_and_no_attachment(
 ) -> None:
     """`finn run --eml order.eml` exits 0 and prints table; `no_attachment.eml` exits 2."""
     fake_settings = Settings(
-        openrouter_api_key="dummy-secret",
-        openrouter_model="fake-golden-llm",
+        llm_api_key="dummy-secret",
+        llm_model="fake-golden-llm",
         contracts_dir=CONTRACTS_DIR,
         cache_dir=tmp_path / "cache",
         runs_dir=tmp_path / "runs",

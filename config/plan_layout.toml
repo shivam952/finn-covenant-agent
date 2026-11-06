@@ -1,0 +1,83 @@
+amount_unit = "T€"
+cover_unit_pattern = 'Alle Beträge in\s+([^\s(]+)'
+
+[plan_column]
+patterns = [
+    'plan\s*{year}',
+    '{year}\s*\(plan\)',
+]
+
+[roles.income_statement]
+sheet_aliases = ["GuV", "Erfolgsplan", "Gewinn- und Verlustrechnung"]
+content_keywords = [
+    "jahresüberschuss",
+    "umsatzerlöse",
+    "materialaufwand",
+    "personalaufwand",
+    "betriebsergebnis",
+]
+column_mode = "plan_year"
+normalise_expenses = true
+
+[roles.balance_sheet]
+sheet_aliases = ["Bilanz", "Planbilanz", "Vermögensplan"]
+content_keywords = [
+    "summe aktiva",
+    "summe passiva",
+    "eigenkapital",
+    "anlagevermögen",
+    "umlaufvermögen",
+]
+column_mode = "plan_year"
+normalise_expenses = false
+
+[roles.loan_schedule]
+sheet_aliases = ["Finanzierung", "Darlehensspiegel", "Finanzierungsplan"]
+content_keywords = [
+    "darlehen",
+    "tilgung",
+    "zinsaufwand",
+    "kreditinstitute",
+]
+column_mode = "all_numeric"
+normalise_expenses = false
+
+[[checks]]
+id = "bilanz_ausgeglichen"
+description = "Summe Aktiva = Summe Passiva"
+lhs = [{ role = "balance_sheet", label_all = ["summe aktiva"] }]
+rhs = [{ role = "balance_sheet", label_all = ["summe passiva"] }]
+tolerance = 0.5
+
+[[checks]]
+id = "abgleich_kreditinstitute"
+description = "Summe Kreditinstitute (Darlehensspiegel) = Verbindlichkeiten gegenüber Kreditinstituten (Bilanz)"
+lhs = [{ role = "loan_schedule", label_all = ["summe kreditinstitute"], column_all = ["stand", "31.12.{year}"] }]
+rhs = [{ role = "balance_sheet", label_all = ["verbindlichkeiten gegenüber kreditinstituten"] }]
+tolerance = 0.5
+
+[[checks]]
+id = "abgleich_zinsaufwand"
+description = "Zinsen und ähnliche Aufwendungen abzgl. Aufzinsung = Zinsaufwand Darlehen gesamt"
+lhs = [
+    { role = "income_statement", label_all = ["zinsen und ähnliche aufwendungen"], label_none = ["abgleich"], sign = 1 },
+    { role = "income_statement", label_all = ["davon", "aufzinsung"], sign = -1 },
+]
+rhs = [{ role = "loan_schedule", label_all = ["summe darlehen gesamt"], column_all = ["zinsaufwand"] }]
+tolerance = 0.5
+
+[[checks]]
+id = "ebitda_identitaet"
+description = "Jahresüberschuss + Steuern + Zinsaufwand - Zinserträge + Abschreibungen = Betriebsergebnis + Abschreibungen"
+lhs = [
+    { role = "income_statement", label_all = ["jahresüberschuss"], sign = 1 },
+    { role = "income_statement", label_all = ["steuern vom einkommen"], sign = 1 },
+    { role = "income_statement", label_all = ["zinsen und ähnliche aufwendungen"], label_none = ["abgleich"], sign = 1 },
+    { role = "income_statement", label_all = ["zinsen und ähnliche erträge"], sign = -1 },
+    { role = "income_statement", label_all = ["abschreibungen"], sign = 1 },
+]
+rhs = [
+    { role = "income_statement", label_all = ["betriebsergebnis"], sign = 1 },
+    { role = "income_statement", label_all = ["abschreibungen"], sign = 1 },
+]
+tolerance = 0.5
