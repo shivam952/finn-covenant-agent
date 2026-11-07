@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import re
 from pathlib import Path
 
 import pymupdf
@@ -17,16 +16,18 @@ class PageText(BaseModel):
     text: str
 
 
-_INLINE_SPACES_RE = re.compile(r"[^\S\r\n]+")
-_MULTI_BLANK_LINES_RE = re.compile(r"\n{3,}")
 
 
 def _clean_page_text(raw_text: str) -> str:
     """Join words on each line with single spaces, keep line breaks, and collapse repeated blank lines."""
     lines = raw_text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
-    cleaned_lines = [_INLINE_SPACES_RE.sub(" ", line).strip() for line in lines]
-    joined = "\n".join(cleaned_lines).strip()
-    return _MULTI_BLANK_LINES_RE.sub("\n\n", joined)
+    cleaned_lines = [" ".join(line.split()) for line in lines]
+    out: list[str] = []
+    for line in cleaned_lines:
+        if not line and out and not out[-1]:
+            continue  # at most one blank line in a row
+        out.append(line)
+    return "\n".join(out).strip()
 
 
 def extract_pages(path: Path) -> list[PageText]:

@@ -13,6 +13,12 @@ DEFAULT_LLM_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_PROVIDER_PARAMS_JSON = '{"require_parameters": true}'
 
 
+def project_path(value: str | Path) -> Path:
+    """Relative paths are resolved against the project root, so Finn works from any working directory."""
+    p = Path(value)
+    return p if p.is_absolute() else (PROJECT_ROOT / p)
+
+
 def _clean_env(name: str, default: str | None = None) -> str | None:
     """Read an environment variable, strip whitespace, and treat values starting with '#' as empty."""
     if name not in os.environ:
@@ -38,7 +44,7 @@ class Settings(BaseModel):
     openrouter_model_fallback: str = ""
     app_url: str = ""
     llm_time_budget_s: float = 180.0
-    llm_max_tokens: int = 12000
+    llm_max_tokens: int = 24000
     reply_language: str = "de"
     plan_layout_path: Path = Path("config/plan_layout.toml")
     finn_mail_address: str = ""
@@ -109,9 +115,9 @@ class Settings(BaseModel):
             llm_provider_params_json=provider_params_json,
             app_url=_clean_env("APP_URL") or "",
             llm_time_budget_s=float(_clean_env("LLM_TIME_BUDGET_S") or "180"),
-            llm_max_tokens=int(_clean_env("LLM_MAX_TOKENS") or "12000"),
+            llm_max_tokens=int(_clean_env("LLM_MAX_TOKENS") or "24000"),
             reply_language=_clean_env("REPLY_LANGUAGE") or "de",
-            plan_layout_path=Path(
+            plan_layout_path=project_path(
                 _clean_env("PLAN_LAYOUT") or "config/plan_layout.toml"
             ),
             finn_mail_address=finn_mail_address,
@@ -122,9 +128,9 @@ class Settings(BaseModel):
             mail_user=mail_user,
             mail_app_password=_clean_env("MAIL_APP_PASSWORD") or "",
             poll_seconds=int(_clean_env("POLL_SECONDS") or "20"),
-            contracts_dir=Path(_clean_env("CONTRACTS_DIR") or "data/contracts"),
-            cache_dir=Path(_clean_env("CACHE_DIR") or "cache"),
-            runs_dir=Path(_clean_env("RUNS_DIR") or "runs"),
+            contracts_dir=project_path(_clean_env("CONTRACTS_DIR") or "data/contracts"),
+            cache_dir=project_path(_clean_env("CACHE_DIR") or "cache"),
+            runs_dir=project_path(_clean_env("RUNS_DIR") or "runs"),
         )
 
     def require_llm(self) -> None:

@@ -11,6 +11,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from finn.llm import JsonLLM
+from finn.notices import notice
 from finn.models import Component, ContractCovenants, Quantity, TermMapping
 from finn.plan.reader import PlanData, plan_item_catalog
 
@@ -40,24 +41,6 @@ class MappingResponse(BaseModel):
     """Structured output schema for term mapping."""
 
     mappings: list[MappingItem]
-
-
-_EMPTY_RATIONALE_KEYWORDS = (
-    "nicht",
-    "kein",
-    "keine",
-    "keinen",
-    "keiner",
-    "entfällt",
-    "fehlt",
-    "weder",
-    "ohne",
-    "null",
-    "0",
-    "no ",
-    "not ",
-    "none",
-)
 
 
 def _leaf_components(contract: ContractCovenants) -> list[tuple[Quantity, Component]]:
@@ -122,7 +105,8 @@ def _build_mapping_user_message(
     for idx, (qty, comp) in enumerate(leaves, start=1):
         lines.append(
             f"{idx}. quantity=\"{qty.name}\" | component=\"{comp.name}\" | "
-            f"sign={comp.sign:+d} | weight={comp.weight}\n"
+            f"sign={comp.sign:+d} | weight={comp.weight}"
+            f"{' | carve_out=true' if comp.carve_out else ''}\n"
             f"   Komponenten-Definition: {comp.definition}\n"
             f"   Größen-Zitat ({qty.source.section}): {qty.source.quote}"
         )
@@ -195,14 +179,22 @@ def validate_mappings(
                         f"darf nicht zusammen mit ihrer Teilzelle '{dep_id}' gewählt werden."
                     )
 
-        # e) Empty item_ids only allowed if rationale explains the plan has no such line
-        if len(m.item_ids) == 0:
-            rat_low = m.rationale.strip().lower()
-            if not rat_low or not any(kw in rat_low for kw in _EMPTY_RATIONALE_KEYWORDS):
-                errors.append(
-                    f"{prefix}: Leere item_ids sind nur zulässig, wenn rationale begründet, "
-                    f"dass diese Position im Wirtschaftsplan nicht vorhanden ist."
-                )
+        # e) An empty mapping needs a reason (the reason itself is shown to the reader, not parsed).
+        if len(m.item_ids) == 0 and not m.rationale.strip():
+            errors.append(f"{prefix}: Leere Zuordnung ohne Begründung.")
+
+    # f) Structural rule: a quantity whose leaf components are ALL unmapped would silently become 0
+    #    (a zero denominator or a missing numerator). That is never a valid reading of a plan.
+    by_qty: dict[str, list[MappingItem]] = {}
+    for m in items:
+        by_qty.setdefault(m.quantity, []).append(m)
+    leaf_qtys = {q.name for q, _ in _leaf_components(contract)}
+    for qty_name in sorted(leaf_qtys):
+        ms = by_qty.get(qty_name, [])
+        if ms and all(len(m.item_ids) == 0 for m in ms):
+            errors.append(
+                f"{qty_name}: Keine einzige Planzelle zugeordnet – die Größe wäre 0."
+            )
 
     return errors
 
@@ -211,9 +203,9 @@ def _mapping_warnings(
     contract: ContractCovenants,
     mappings: list[TermMapping],
     plan: PlanData,
-) -> list[str]:
-    """Generate non-fatal semantic warnings for term mappings."""
-    warnings: list[str] = []
+) -> list[dict[str, Any]]:
+    """Non-fatal remarks on a mapping, as language-neutral notices."""
+    warnings: list[dict[str, Any]] = []
     qty_map = {q.name: q for q in contract.quantities}
 
     # 1. Same cell used with opposite signs within one quantity
@@ -236,10 +228,7 @@ def _mapping_warnings(
                 cell_signs.setdefault(cid, set()).add(comp.sign)
         for cid, signs in cell_signs.items():
             if len(signs) > 1:
-                warnings.append(
-                    f"Größe '{qty.name}': Zelle '{cid}' wird innerhalb derselben Größe mit "
-                    f"gegensätzlichen Vorzeichen (+1 und -1) verwendet."
-                )
+                warnings.append(notice("opposite_signs", cell=cid, quantity=qty.name))
 
     # 2. Sheet role vs. covenant test_basis mismatch (income_statement cell in stichtag covenant)
     for cov in contract.covenants:
@@ -261,14 +250,89 @@ def _mapping_warnings(
                     )
                     if m is None:
                         continue
+                    flow_roles = set(plan.meta.get("flow_roles", []))
                     for cid in m.item_ids:
-                        if cid in plan.items and plan.items[cid].role == "income_statement":
-                            warnings.append(
-                                f"Covenant '{cov.id}' (Stichtag): Komponente '{comp.name}' verwendet "
-                                f"Erfolgsplan-Zelle '{cid}'."
-                            )
+                        if cid in plan.items and plan.items[cid].role in flow_roles:
+                            warnings.append(notice("flow_cell_in_stichtag_covenant", covenant=cov.name,
+                                                   component=comp.name, cell=cid))
+
+    # 3. Every component set to "no plan line" is shown to the reader with its reason.
+    for m in mappings:
+        if not m.item_ids:
+            warnings.append(notice("empty_plan_line", component=m.component, quantity=m.quantity,
+                                   rationale=m.rationale.strip()))
 
     return warnings
+
+
+def _contained_cells(cell_ids: set[str], plan: PlanData) -> set[str]:
+    """Cells whose amount is part of the sum of `cell_ids`: the cells, the inputs of chosen totals,
+    and "davon" sub-lines of any of those."""
+    out = set(cell_ids)
+    for cid in cell_ids:
+        item = plan.items.get(cid)
+        if item is not None:
+            out.update(item.depends_on)
+    changed = True
+    while changed:
+        changed = False
+        for iid, item in plan.items.items():
+            if iid not in out and item.part_of is not None and item.part_of in out:
+                out.add(iid)
+                changed = True
+    return out
+
+
+def _cells_with_sign(
+    qty_name: str,
+    want_sign: int,
+    contract: ContractCovenants,
+    by_key: dict[tuple[str, str], TermMapping],
+    sign_mult: int = 1,
+    visiting: frozenset[str] = frozenset(),
+) -> set[str]:
+    """All mapped cells that enter `qty_name` with the effective sign `want_sign` (refs followed)."""
+    qty = next((q for q in contract.quantities if q.name == qty_name), None)
+    if qty is None or qty_name in visiting:
+        return set()
+    cells: set[str] = set()
+    for comp in qty.components:
+        eff = sign_mult * comp.sign
+        if comp.ref is not None:
+            cells |= _cells_with_sign(comp.ref, want_sign, contract, by_key, eff, visiting | {qty_name})
+        elif eff == want_sign and not comp.carve_out:
+            m = by_key.get((qty.name, comp.name))
+            if m is not None:
+                cells.update(m.item_ids)
+    return cells
+
+
+def apply_carve_outs(
+    contract: ContractCovenants, mappings: list[TermMapping], plan: PlanData
+) -> tuple[list[TermMapping], list[dict[str, Any]]]:
+    """A carve-out ("X, excluding Y") may only remove cells that the rest of its quantity contains.
+
+    If the cells chosen for X already leave Y out, subtracting Y again would count the exclusion
+    twice; those cells are dropped from the carve-out and the reader is told.
+    """
+    by_key = {(m.quantity, m.component): m for m in mappings}
+    notes: list[dict[str, Any]] = []
+    out: list[TermMapping] = []
+    for m in mappings:
+        qty = next((q for q in contract.quantities if q.name == m.quantity), None)
+        comp = next((c for c in qty.components if c.name == m.component), None) if qty else None
+        if comp is None or not comp.carve_out or not m.item_ids:
+            out.append(m)
+            continue
+        base = _contained_cells(_cells_with_sign(qty.name, -comp.sign, contract, by_key), plan)
+        keep = [i for i in m.item_ids if i in base]
+        dropped = [i for i in m.item_ids if i not in base]
+        if dropped:
+            notes.append(notice("carve_out_not_contained", component=m.component, quantity=m.quantity,
+                                cells=", ".join(dropped)))
+            m = m.model_copy(update={"item_ids": keep})
+        out.append(m)
+    return out, notes
 
 
 def map_terms(
@@ -315,7 +379,9 @@ def map_terms(
         cached_meta = dict(cached_payload.get("meta", {}))
         cached_meta["cache_hit"] = True
         cached_meta["cache_file"] = str(cache_file)
-        return cached_mappings, cached_meta
+        adjusted, carve_notes = apply_carve_outs(contract, cached_mappings, plan)
+        cached_meta["warnings"] = carve_notes + _mapping_warnings(contract, adjusted, plan)
+        return adjusted, cached_meta
 
     base_user_msg = _build_mapping_user_message(contract, leaves, catalog_no_values)
 
@@ -377,7 +443,9 @@ def map_terms(
             )
         )
 
-    warnings = _mapping_warnings(contract, term_mappings, plan)
+    raw_mappings = term_mappings
+    term_mappings, carve_notes = apply_carve_outs(contract, raw_mappings, plan)
+    warnings = carve_notes + _mapping_warnings(contract, term_mappings, plan)
     meta: dict[str, Any] = {
         "purpose": f"map_terms:{contract.contract_file}",
         "model": final_model,
@@ -393,7 +461,8 @@ def map_terms(
 
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache_payload = {
-        "mappings": [m.model_dump(mode="json") for m in term_mappings],
+        # The raw LLM choice is cached; the deterministic carve-out rule is re-applied on every load.
+        "mappings": [m.model_dump(mode="json") for m in raw_mappings],
         "meta": meta,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }

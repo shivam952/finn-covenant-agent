@@ -296,3 +296,83 @@ def test_finish_reason_length_triggers_retry(tmp_path: Path) -> None:
     assert meta["attempts"] == 2
     assert "Antwort abgeschnitten (max_tokens)" in meta["attempt_log"][0]["error"]
     assert _strip_verified(cc) == _strip_verified(v2_gold)
+
+
+class _NoEndpointError(Exception):
+    """Mimics the gateway error raised when no endpoint honours the provider parameters."""
+
+    status_code = 404
+
+    def __init__(self) -> None:
+        super().__init__("No endpoints found that can handle the requested parameters.")
+
+
+def test_provider_params_rejection_retries_same_model_without_them() -> None:
+    """A 404 'no endpoints for the requested parameters' retries the SAME model once without provider params."""
+    settings = Settings(llm_api_key="dummy", llm_model="primary/model", llm_model_fallback="")
+    golden = _load_golden()["Vertrag_1_Sparkasse_Investitionsdarlehen.pdf"]
+    payload = json.dumps(_strip_verified(golden))
+    seen_params: list[Any] = []
+    llm: LLMClient
+
+    def fake_transport(
+        model: str, messages: list[dict[str, str]], schema: dict[str, Any]
+    ) -> TransportReturn:
+        seen_params.append(llm.current_provider_params)
+        if llm.current_provider_params is not None:
+            raise _NoEndpointError()
+        return payload, 10, 10
+
+    llm = LLMClient(settings, transport=fake_transport)
+    result, meta = llm.complete_json("sys", "user", ContractCovenants, purpose="t")
+
+    assert result.has_covenants is False
+    assert meta["model"] == "primary/model"
+    assert seen_params[0] == {"require_parameters": True}
+    assert seen_params[1] is None
+    assert any(a.get("action") == "require_parameters disabled" for a in meta["attempt_log"])
+
+
+def test_provider_params_rejection_is_relaxed_only_once_per_model() -> None:
+    """If the model still fails after relaxing the params, the client falls back instead of looping."""
+    settings = Settings(llm_api_key="dummy", llm_model="primary/model", llm_model_fallback="")
+    llm: LLMClient
+    calls: list[str] = []
+
+    def always_404(
+        model: str, messages: list[dict[str, str]], schema: dict[str, Any]
+    ) -> TransportReturn:
+        calls.append(model)
+        raise _NoEndpointError()
+
+    llm = LLMClient(settings, transport=always_404)
+    with pytest.raises(LLMError):
+        llm.complete_json("sys", "user", ContractCovenants, purpose="t")
+    assert len(calls) == 2
+
+
+def test_golden_limits_all_appear_in_their_quotes() -> None:
+    from finn.contracts.extract import limit_not_in_quote
+
+    for cc in _load_golden().values():
+        assert limit_not_in_quote(cc) == [], cc.contract_file
+
+
+def test_limit_missing_from_quote_triggers_one_corrective_retry(tmp_path: Path) -> None:
+    """A limit read from the wrong clause (e.g. a pricing grid) is caught: the quote does not contain it."""
+    golden = _load_golden()["Vertrag_4_Konsortialkredit.pdf"]
+    wrong = golden.model_copy(deep=True)
+    wrong.covenants[1].limit = 3.0  # e.g. a step of the margin grid instead of the 3,50 maximum
+    answers = [json.dumps(_strip_verified(wrong)), json.dumps(_strip_verified(golden))]
+    calls: list[str] = []
+
+    def transport(model: str, messages: list[dict[str, str]], schema: dict[str, Any]) -> TransportReturn:
+        calls.append(messages[-1]["content"])
+        return answers.pop(0), 10, 10
+
+    settings = Settings(llm_api_key="x", llm_model="m")
+    cc, meta = extract_covenants(CONTRACTS_DIR / "Vertrag_4_Konsortialkredit.pdf",
+                                 LLMClient(settings, transport=transport), tmp_path)
+    assert len(calls) == 2 and "V4-DYNVG" in calls[1]
+    assert cc.covenants[1].limit == 3.5
+    assert meta["correction_retry"]["missing_limits_after"] == []

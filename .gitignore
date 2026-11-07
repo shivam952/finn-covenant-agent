@@ -1,6 +1,6 @@
 .env
-cache/*
-!cache/.gitkeep
+# cache/ is committed on purpose: the verified contract extractions and mappings let a fresh
+# clone run without LLM calls. Delete cache/*.json to force a fresh reading.
 runs/*
 !runs/.gitkeep
 __pycache__/

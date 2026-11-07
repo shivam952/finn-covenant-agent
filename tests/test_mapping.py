@@ -125,7 +125,8 @@ def test_unknown_item_id_triggers_retry_with_id_in_error(tmp_path: Path) -> None
     assert call_count == 2
     assert meta["attempts"] == 2
     assert "Bilanz!Z99" in prompts_seen[1]
-    assert len(mapped) == 3
+    leaf_count = sum(1 for q in v2.quantities for c in q.components if c.ref is None)
+    assert len(mapped) == leaf_count
 
 
 def test_double_counting_total_and_part_is_flagged_and_missing_component_raises(
@@ -233,3 +234,31 @@ def test_changed_plan_value_hits_cache_while_renamed_label_misses_cache(
     assert meta3["cache_hit"] is False
     assert calls == 2
 
+
+
+def test_quantity_with_no_cell_at_all_is_rejected_and_empty_lines_are_reported() -> None:
+    """Structural rules instead of keyword lists: a quantity can't be all-empty; empty lines are shown."""
+    from finn.mapping import _mapping_warnings, validate_mappings
+
+    contracts, all_mappings = _load_fixtures()
+    v4 = "Vertrag_4_Konsortialkredit.pdf"
+    contract = contracts[v4]
+    mappings = [m for m in all_mappings if m.contract_file == v4]
+    plan = read_plan(SAMPLE_XLSX)
+    # every leaf of "Nettofinanzverbindlichkeiten" unmapped -> would silently be 0
+    broken = [m.model_copy(update={"item_ids": []}) if m.quantity == "Nettofinanzverbindlichkeiten" else m
+              for m in mappings]
+    errors = validate_mappings(
+        contract,
+        [MappingItem(quantity=m.quantity, component=m.component, item_ids=m.item_ids, rationale=m.rationale)
+         for m in broken],
+        plan,
+    )
+    assert any("Nettofinanzverbindlichkeiten" in e and "wäre 0" in e for e in errors)
+
+    from finn.notices import render_notice
+
+    warnings = [render_notice(w, "de") for w in _mapping_warnings(contract, mappings, plan)]
+    assert any("keine Planposition" in w and "Außerordentliche" in w for w in warnings)
+    english = [render_notice(w, "en") for w in _mapping_warnings(contract, mappings, plan)]
+    assert any("no plan line" in w for w in english)

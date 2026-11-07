@@ -23,6 +23,8 @@ If the contract contains NO binding financial covenants:
 Contract definitions of financial terms are often spread across § 1 (Begriffsbestimmungen / Definitionen), the financial covenants clause, and annexes (Anlagen). Follow every cross-reference carefully.
 
 - Every covenant's `numerator` and `denominator` MUST be the exact `name` of a `Quantity` in `quantities`. Even a single-item balance sheet figure (e.g., total assets or equity) must be defined as a `Quantity` with at least one `Component`.
+- Define only the quantities needed to compute the covenants' numerators and denominators (directly or through `ref`). Do not add quantities for cure rights, equity injections, reporting duties or documents (for example the annual financial statements or the business plan itself).
+- The numerator contains only what the contract puts above the fraction line, the denominator only what is below it. Neither may contain the other (for a coverage ratio, the debt service belongs in the denominator only).
 - Classify each `Quantity`'s `kind` using one of these generic categories:
   - `"earnings"`: an operating or pre-debt-service earnings measure (such as operating earnings before depreciation/amortization or operating cash flow before debt service).
   - `"equity"`: a balance-sheet equity or economic equity figure.
@@ -37,6 +39,7 @@ Contract definitions of financial terms are often spread across § 1 (Begriffsbe
   - Items subtracted ("abzüglich", "vermindert um") get `sign: -1`.
   - A percentage weighting → `weight` as a decimal (otherwise set `weight: 1.0`).
   - If a component refers to another defined `Quantity` in the same contract (for example, when a numerator is defined as an earnings measure minus taxes, where both the earnings measure and taxes are defined quantities), define each referenced concept as its own `Quantity` in `quantities` and set `ref` on the component to that `Quantity`'s `name`. When `ref` is null, the component represents a direct leaf item to be mapped to the financial plan.
+  - Items the definition leaves out are NOT components; never list an item with `weight: 0`. State each exclusion in the `definition` of the component it is excluded from. Only if the definition explicitly removes an item from a broader term listed in the same quantity ("ausgenommen", "mit Ausnahme von", "nicht jedoch") may you list that item as its own component, with `sign: -1` and `carve_out: true`. All other components have `carve_out: false`.
   - If the contractual definition mentions an item that may or may not appear as a separate line in a standard HGB plan (such as extraordinary items / außerordentliche Aufwendungen und Erträge), still include it as a `Component` with a clear `definition`.
 - **Inclusion and Exclusion Checklist (`definition`):**
   In each component's `definition` field, capture the contract's exact inclusion and exclusion rules in German, staying close to the contractual wording. Answer the following questions strictly FROM THE TEXT:

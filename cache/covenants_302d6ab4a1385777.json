@@ -1,0 +1,42 @@
+{
+  "contract": {
+    "contract_file": "Vertrag_1_Sparkasse_Investitionsdarlehen.pdf",
+    "contract_label": "Sparkasse Musterstadt Investitionsdarlehen (Nr. 4471 203 118)",
+    "has_covenants": false,
+    "reason_if_none": "Der Vertrag enthält keine fortlaufenden, verbindlichen Finanzkennzahlen-Verpflichtungen (Financial Covenants). Die in der Präambel erwähnte bilanzielle Eigenkapitalquote von 28,4 % sowie der dynamische Verschuldungsgrad von 2,9 stellen lediglich historische Stichtagswerte zum 31. Dezember 2019 dar, die der Kreditentscheidung zugrunde lagen, begründen jedoch keine Rechtspflicht zu deren künftiger Einhaltung. Die Besicherung erfolgt über eine kommunale Ausfallbürgschaft der Stadt Musterstadt (§ 10).",
+    "reason_source": {
+      "page": 1,
+      "section": "Präambel",
+      "quote": "Zum 31. Dezember 2019 wies die Kreditnehmerin eine bilanzielle Eigenkapitalquote von 28,4 % und einen dynamischen Verschuldungsgrad (Nettofinanzverbindlichkeiten zu EBITDA) von 2,9 aus.",
+      "verified": true,
+      "verify_note": null,
+      "original_page": null
+    },
+    "quantities": [],
+    "covenants": []
+  },
+  "meta": {
+    "purpose": "extract_covenants:Vertrag_1_Sparkasse_Investitionsdarlehen.pdf",
+    "model": "google/gemini-3.8-flash",
+    "prompt_tokens": 11619,
+    "completion_tokens": 1487,
+    "latency_s": 11.551,
+    "attempts": 1,
+    "attempt_log": [
+      {
+        "attempt": 1,
+        "model": "google/gemini-3.8-flash",
+        "status": "ok"
+      }
+    ],
+    "cache_hit": false,
+    "cache_key": "302d6ab4a1385777526827c5f303436e0b4ea39dbe6a73289ad44052366de932",
+    "cache_file": "C:\\Users\\shiva\\OneDrive\\Desktop\\FINN\\finn-covenant-agent\\cache\\covenants_302d6ab4a1385777.json",
+    "prompt_version": "v1",
+    "quotes_total": 1,
+    "quotes_verified": 1,
+    "warnings": [],
+    "normalized": []
+  },
+  "created_at": "2026-11-07T00:02:40.694780+00:00"
+}

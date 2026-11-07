@@ -4,13 +4,24 @@ from __future__ import annotations
 
 import ast
 import io
-import re
 import tokenize
 from pathlib import Path
 
 SRC_FINN_DIR = Path(__file__).resolve().parents[1] / "src" / "finn"
 
-YEAR_RE = re.compile(r"\b(?:19|20)\d{2}\b")
+
+
+def _years_in(text: str) -> list[str]:
+    """4-digit runs starting with 19 or 20 that are not part of a longer number or word."""
+    found: list[str] = []
+    for i in range(len(text) - 3):
+        chunk = text[i : i + 4]
+        before = text[i - 1] if i > 0 else " "
+        after = text[i + 4] if i + 4 < len(text) else " "
+        if chunk.isdigit() and chunk[:2] in ("19", "20") and not before.isalnum() and not after.isalnum():
+            found.append(chunk)
+    return found
+
 FORBIDDEN_LITERALS = (
     "GuV",
     "Bilanz",
@@ -39,9 +50,9 @@ def test_no_hardcoded_years_labels_sheets_units_or_vendors_in_src() -> None:
                 val = node.value
                 lineno = getattr(node, "lineno", 0)
 
-                for m in YEAR_RE.finditer(val):
+                for year in _years_in(val):
                     violations.append(
-                        f"{rel_path}:{lineno}: 4-digit year '{m.group(0)}' in string literal {val!r}"
+                        f"{rel_path}:{lineno}: 4-digit year '{year}' in string literal {val!r}"
                     )
 
                 for forbidden in FORBIDDEN_LITERALS:
@@ -68,3 +79,20 @@ def test_no_hardcoded_years_labels_sheets_units_or_vendors_in_src() -> None:
                     )
 
     assert not violations, "Hardcoding violations found in src/finn:\n" + "\n".join(violations)
+
+
+def test_no_regular_expressions_in_src() -> None:
+    """Project rule: no regex in src/. Parse with real parsers (openpyxl tokenizer) or plain string methods."""
+    offenders: list[str] = []
+    for path in sorted(SRC_FINN_DIR.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            names: list[str] = []
+            if isinstance(node, ast.Import):
+                names = [a.name for a in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                names = [node.module]
+            for name in names:
+                if name.split(".")[0] in ("re", "regex"):
+                    offenders.append(f"{path.relative_to(SRC_FINN_DIR).as_posix()}:{node.lineno}: import {name}")
+    assert not offenders, "Regex modules imported in src/finn:\n" + "\n".join(offenders)

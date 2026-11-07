@@ -20,6 +20,11 @@ def _load_texts(lang: str) -> dict[str, Any]:
     return tomllib.loads(path.read_text(encoding="utf-8"))
 
 
+def load_texts(lang: str) -> dict[str, Any]:
+    """Public accessor for the message templates of a language."""
+    return _load_texts(lang)
+
+
 def _fmt_amount_auto(x: float, lang: str) -> str:
     if abs(x - round(x)) < 1e-9:
         return fmt_num(x, decimals=0, lang=lang)
@@ -88,6 +93,9 @@ def render_stress(stress: StressResult, lang: str = "de", unit: str = "") -> str
         else fmt_num(stress.limit, decimals=limit_decimals, lang=lang)
     )
 
+    if stress.kind == "not_applicable":
+        return str(templates["not_applicable"]).format(driver=stress.driver_quantity)
+
     if stress.kind == "already_breached":
         diff_val = stress.pct if stress.unit == "percent" else stress.amount
         diff_num = abs(diff_val or 0.0)
@@ -126,6 +134,12 @@ def render_stress(stress: StressResult, lang: str = "de", unit: str = "") -> str
 def render_check(check: CheckResult, lang: str = "de", unit: str = "") -> str:
     """Render a structured CheckResult into a localized message."""
     templates = _load_texts(lang)["checks"]
+    if check.message_key == "formula_unsupported_cached":
+        return str(templates["formula_unsupported_cached"]).format(
+            cell=check.params.get("cell", check.id),
+            formula=check.params.get("formula", ""),
+            cached=fmt_num(float(check.params.get("cached", 0.0)), decimals=2, lang=lang),
+        )
     if check.message_key == "formula_cache_mismatch":
         eval_val = float(check.params.get("evaluated", check.lhs or 0.0))
         cached_val = float(check.params.get("cached", check.rhs or 0.0))

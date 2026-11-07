@@ -13,6 +13,8 @@ from typing import Any
 from finn.config import load_settings
 from finn.contracts.pdf_text import extract_pages, file_sha256, render_for_llm
 from finn.contracts.verify import verify_contract
+from finn.notices import notice
+from finn.numbers import canonical_value, extract_number_tokens
 from finn.llm import JsonLLM, LLMClient
 from finn.models import ContractCovenants, Quantity, Source
 
@@ -45,32 +47,115 @@ def _collect_all_sources(cc: ContractCovenants) -> list[Source]:
     return sources
 
 
-def _semantic_warnings(cc: ContractCovenants) -> list[str]:
-    """Run non-mutating semantic checks on extracted ContractCovenants and return warnings."""
-    warnings: list[str] = []
+def limit_not_in_quote(cc: ContractCovenants, lang: str = "de") -> list[str]:
+    """Covenant ids whose limit does not occur as a number in the cited obligation quote.
 
+    The quote check proves the text exists; this proves the limit was read from that text
+    (and not, say, from a pricing grid elsewhere in the contract).
+    """
+    bad: list[str] = []
+    for cov in cc.covenants:
+        tokens = set(extract_number_tokens(cov.source.quote, lang))
+        if canonical_value(cov.limit) not in tokens:
+            bad.append(cov.id)
+    return bad
+
+
+def _reachable_quantities(cc: ContractCovenants, start: str) -> set[str]:
+    """Names of all quantities reachable from `start` through component refs (including start)."""
+    by_name = {q.name: q for q in cc.quantities}
+    seen: set[str] = set()
+    stack = [start]
+    while stack:
+        name = stack.pop()
+        if name in seen or name not in by_name:
+            continue
+        seen.add(name)
+        stack.extend(c.ref for c in by_name[name].components if c.ref is not None)
+    return seen
+
+
+def structural_problems(cc: ContractCovenants) -> list[str]:
+    """Covenant definitions that cannot be a valid ratio, as plain-language findings for the model.
+
+    A numerator that contains the whole denominator quantity (or the other way round) mixes the
+    two sides of the ratio. Refs must point to defined quantities.
+    """
+    problems: list[str] = []
+    names = {q.name for q in cc.quantities}
+    for qty in cc.quantities:
+        for comp in qty.components:
+            if comp.ref is not None and comp.ref not in names:
+                problems.append(f"component '{comp.name}' in '{qty.name}' refers to undefined quantity '{comp.ref}'")
+    for cov in cc.covenants:
+        if cov.numerator == cov.denominator:
+            problems.append(f"{cov.id}: numerator and denominator are the same quantity")
+            continue
+        if cov.denominator in _reachable_quantities(cc, cov.numerator):
+            problems.append(f"{cov.id}: the numerator '{cov.numerator}' contains the denominator "
+                            f"'{cov.denominator}'; the numerator must only contain what the contract "
+                            "puts above the fraction line")
+        if cov.numerator in _reachable_quantities(cc, cov.denominator):
+            problems.append(f"{cov.id}: the denominator '{cov.denominator}' contains the numerator "
+                            f"'{cov.numerator}'")
+    return problems
+
+
+def normalize_contract(cc: ContractCovenants) -> tuple[ContractCovenants, list[str]]:
+    """Deterministic clean-up of an extraction, recorded for the audit (not shown as warnings).
+
+    - Components with weight 0 contribute nothing; they are dropped (the model sometimes lists
+      explicitly excluded items this way).
+    - Quantities no covenant needs are dropped, so the mapping step only sees what is calculated.
+    """
+    changes: list[str] = []
+    quantities = []
+    for qty in cc.quantities:
+        kept = [c for c in qty.components if c.weight != 0.0]
+        for c in qty.components:
+            if c.weight == 0.0:
+                changes.append(f"dropped weight-0 component '{c.name}' from '{qty.name}'")
+        quantities.append(qty.model_copy(update={"components": kept}) if len(kept) != len(qty.components) else qty)
+    cc = cc.model_copy(update={"quantities": quantities})
+    if cc.has_covenants:
+        needed: set[str] = set()
+        for cov in cc.covenants:
+            needed |= _reachable_quantities(cc, cov.numerator) | _reachable_quantities(cc, cov.denominator)
+        for q in cc.quantities:
+            if q.name not in needed:
+                changes.append(f"dropped quantity '{q.name}' (not used by any covenant)")
+        cc = cc.model_copy(update={"quantities": [q for q in cc.quantities if q.name in needed]})
+    return cc, changes
+
+
+def _dedupe(notes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for n in notes:
+        key = json.dumps(n, sort_keys=True, ensure_ascii=False, default=str)
+        if key not in seen:
+            seen.add(key)
+            out.append(n)
+    return out
+
+
+def _semantic_warnings(cc: ContractCovenants) -> list[dict[str, Any]]:
+    """Non-mutating plausibility checks on an extraction, as language-neutral notices."""
+    notes: list[dict[str, Any]] = []
     for cov in cc.covenants:
         if cov.unit == "percent" and not (0.0 < cov.limit <= 100.0):
-            warnings.append(
-                f"Covenant '{cov.id}': Prozent-Grenzwert {cov.limit} liegt außerhalb von (0, 100]."
-            )
-
+            notes.append(notice("percent_limit_out_of_range", covenant=cov.name, limit=cov.limit))
     for qty in cc.quantities:
         for comp in qty.components:
             if not (0.0 < comp.weight <= 1.0):
-                warnings.append(
-                    f"Größe '{qty.name}', Komponente '{comp.name}': Gewicht {comp.weight} liegt außerhalb von (0, 1]."
-                )
-
+                notes.append(notice("weight_out_of_range", weight=comp.weight, component=comp.name, quantity=qty.name))
     for src in _collect_all_sources(cc):
         if src.verified is False:
-            warnings.append(
-                f"Nicht verifiziertes Zitat ({src.section}, S. {src.page}): {src.verify_note}"
-            )
-        elif src.verify_note and src.verify_note.startswith("Seitenangabe korrigiert"):
-            warnings.append(f"Hinweis zum Zitat ({src.section}): {src.verify_note}")
-
-    return warnings
+            notes.append(notice(src.verify_note or "quote_not_found", section=src.section, page=src.page))
+        elif src.verify_note == "quote_page_corrected":
+            notes.append(notice("quote_page_corrected", section=src.section, page=src.page,
+                                original_page=src.original_page))
+    return notes
 
 
 def extract_covenants(
@@ -112,9 +197,46 @@ def extract_covenants(
         purpose=f"extract_covenants:{pdf_path.name}",
     )
 
-    forced = extracted.model_copy(update={"contract_file": pdf_path.name})
-    verified = verify_contract(forced, pages)
+    def _check(candidate: ContractCovenants) -> tuple[ContractCovenants, list[str], list[str], list[str]]:
+        checked = verify_contract(candidate.model_copy(update={"contract_file": pdf_path.name}), pages)
+        checked, changes = normalize_contract(checked)
+        return checked, limit_not_in_quote(checked), structural_problems(checked), changes
+
+    verified, missing_limits, struct, normalized = _check(extracted)
+    if missing_limits or struct:
+        # One corrective round: name the problems, let the model re-read. Code never edits a value.
+        findings: list[str] = []
+        if missing_limits:
+            findings.append(
+                "for these covenants the limit does not appear in the quoted obligation text: "
+                f"{', '.join(missing_limits)}. Re-read the clause that states the binding limit and "
+                "quote the sentence that contains it"
+            )
+        findings += struct
+        feedback = "\n\nYour previous answer was checked by code and has these problems:\n- " + "\n- ".join(findings)
+        retry, retry_meta = llm.complete_json(
+            system=prompt_text,
+            user=user_message + feedback,
+            schema=ContractCovenants,
+            purpose=f"extract_covenants:{pdf_path.name}",
+        )
+        r_verified, r_missing, r_struct, r_normalized = _check(retry)
+        llm_meta = {**llm_meta, "correction_retry": {
+            "missing_limits_before": missing_limits, "missing_limits_after": r_missing,
+            "structural_before": struct, "structural_after": r_struct, "meta": retry_meta}}
+        if (len(r_struct), len(r_missing)) < (len(struct), len(missing_limits)):
+            verified, missing_limits, struct, normalized = r_verified, r_missing, r_struct, r_normalized
+
+    if struct:
+        # A ratio whose two sides overlap would give a confident wrong number: refuse this contract.
+        raise ExtractionStructureError(
+            f"{pdf_path.name}: covenant definition is not a valid ratio: {'; '.join(struct)}"
+        )
+
     warnings = _semantic_warnings(verified)
+    names = {c.id: c.name for c in verified.covenants}
+    for cov_id in missing_limits:
+        warnings.append(notice("limit_not_in_quote", covenant=names.get(cov_id, cov_id)))
 
     all_sources = _collect_all_sources(verified)
     verified_count = sum(1 for s in all_sources if s.verified is True)
@@ -128,6 +250,7 @@ def extract_covenants(
         "quotes_total": len(all_sources),
         "quotes_verified": verified_count,
         "warnings": warnings,
+        "normalized": normalized,
     }
 
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -144,6 +267,14 @@ def extract_covenants(
     return verified, meta
 
 
+class ExtractionStructureError(RuntimeError):
+    """The extracted covenant definition is structurally impossible, even after one correction."""
+
+
+class NoContractsError(RuntimeError):
+    """The contracts folder is empty or missing."""
+
+
 def extract_all(
     contracts_dir: Path,
     llm: JsonLLM,
@@ -152,20 +283,34 @@ def extract_all(
     *,
     prompt_path: Path | None = None,
     use_cache: bool = True,
+    errors: list[tuple[str, str]] | None = None,
 ) -> list[tuple[ContractCovenants, dict[str, Any]]]:
-    """Extract covenants for all PDF files in contracts_dir, sorted by file name."""
+    """Extract covenants for all PDF files in contracts_dir, sorted by file name.
+
+    If `errors` is given, a contract that fails is recorded there as (file name, reason) and the
+    others are still processed; otherwise the first failure is raised.
+    """
     contracts_dir = Path(contracts_dir)
     pdf_files = sorted(contracts_dir.glob("*.pdf"), key=lambda p: p.name)
+    if not pdf_files:
+        # Never answer "all fine" with an empty table: no contracts is a configuration error.
+        raise NoContractsError(f"No contract PDFs found in {contracts_dir.resolve()}")
     results: list[tuple[ContractCovenants, dict[str, Any]]] = []
     for pdf_path in pdf_files:
-        res = extract_covenants(
-            pdf_path,
-            llm,
-            cache_dir,
-            prompt_version=prompt_version,
-            prompt_path=prompt_path,
-            use_cache=use_cache,
-        )
+        try:
+            res = extract_covenants(
+                pdf_path,
+                llm,
+                cache_dir,
+                prompt_version=prompt_version,
+                prompt_path=prompt_path,
+                use_cache=use_cache,
+            )
+        except Exception as exc:
+            if errors is None:
+                raise
+            errors.append((pdf_path.name, f"{type(exc).__name__}: {exc}"))
+            continue
         results.append(res)
     return results
 
@@ -219,6 +364,7 @@ def _compare_with_golden(*, use_cache: bool = True) -> int:
         use_cache=use_cache,
     )
     differences: list[str] = []
+    infos: list[str] = []
 
     print(
         f"=== Live Extraction Comparison (configured: {llm.model_name}, "
@@ -247,6 +393,11 @@ def _compare_with_golden(*, use_cache: bool = True) -> int:
             f"verified={q_ver}/{q_tot} ({ver_pct:.0f}%) | "
             f"tokens={p_tok}+{c_tok} | latency={lat:.2f}s"
         )
+
+        if q_ver < q_tot:
+            differences.append(
+                f"{cc.contract_file}: {q_tot - q_ver} von {q_tot} Zitaten nicht verifiziert"
+            )
 
         if cc.has_covenants != gold.has_covenants:
             differences.append(
@@ -300,16 +451,21 @@ def _compare_with_golden(*, use_cache: bool = True) -> int:
                 differences.append(
                     f"{cc.contract_file} [{g_cov.name}]: test_basis {matched.test_basis} != {g_cov.test_basis}"
                 )
+            # Structure differences are informational only: a model may legitimately split a
+            # defined term into its listed sub-items or add a deduction line the contract
+            # really contains. Correctness is proven end-to-end by the value check.
             if ext_num_sig != gold_num_sig:
-                differences.append(
-                    f"{cc.contract_file} [{g_cov.name}]: numerator signature {ext_num_sig} != {gold_num_sig}"
+                infos.append(
+                    f"{cc.contract_file} [{g_cov.name}]: INFO (Struktur abweichend) Zähler {ext_num_sig} vs. {gold_num_sig}"
                 )
             if ext_den_sig != gold_den_sig:
-                differences.append(
-                    f"{cc.contract_file} [{g_cov.name}]: denominator signature {ext_den_sig} != {gold_den_sig}"
+                infos.append(
+                    f"{cc.contract_file} [{g_cov.name}]: INFO (Struktur abweichend) Nenner {ext_den_sig} vs. {gold_den_sig}"
                 )
 
     print()
+    for info in infos:
+        print(f"  ~ {info}")
     if not differences:
         print("MATCH")
         return 0

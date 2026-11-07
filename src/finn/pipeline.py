@@ -15,9 +15,19 @@ from finn.config import Settings
 from finn.contracts.extract import extract_all
 from finn.llm import JsonLLM, make_llm
 from finn.mapping import map_terms
-from finn.models import ContractCovenants, Result, RunReport, TermMapping
+from finn.models import CheckResult, ContractCovenants, PlanCellInfo, Result, RunReport, TermMapping
 from finn.plan.reader import plan_item_catalog, read_plan
+from finn.notices import render_notice
 from finn.render import render_check
+
+
+class PlanInconsistentError(Exception):
+    """A blocking plausibility check failed: the plan's sheets contradict each other."""
+
+    def __init__(self, failed: list[CheckResult], plan_meta: dict[str, Any]) -> None:
+        super().__init__(", ".join(c.id for c in failed))
+        self.failed = failed
+        self.plan_meta = plan_meta
 
 
 def generate_run_id() -> str:
@@ -69,7 +79,12 @@ class RunOutcome:
     audit: dict[str, Any]
 
 
-def run_check(xlsx_path: Path, ctx: RunContext) -> RunOutcome:
+def run_check(
+    xlsx_path: Path,
+    ctx: RunContext,
+    plan_year: int | None = None,
+    lang: str | None = None,
+) -> RunOutcome:
     """Execute the fixed pipeline: read_plan -> extract_all -> map_terms -> evaluate_contract -> RunReport."""
     xlsx_path = Path(xlsx_path)
     contracts_dir = ctx.paths.get("contracts_dir", Path(ctx.settings.contracts_dir))
@@ -79,15 +94,19 @@ def run_check(xlsx_path: Path, ctx: RunContext) -> RunOutcome:
 
     # Step 1: Read the Excel business plan (PlanFormatError propagates to caller)
     t0 = time.monotonic()
-    plan = read_plan(xlsx_path)
+    plan = read_plan(xlsx_path, plan_year=plan_year)
     plan_duration_s = round(time.monotonic() - t0, 3)
+    failed_blocking = [c for c in plan.checks if c.blocking and not c.passed and not c.skipped]
+    if failed_blocking:
+        raise PlanInconsistentError(failed_blocking, plan.meta)
     catalog_with_values = plan_item_catalog(plan, include_values=True)
     amount_unit = str(plan.meta.get("amount_unit", ""))
-    lang = ctx.settings.reply_language
+    lang = lang or ctx.settings.reply_language
 
     # Step 2: Extract covenants from all contracts (cached)
     t0 = time.monotonic()
-    extracted_pairs = extract_all(contracts_dir, ctx.llm, cache_dir)
+    contract_errors: list[tuple[str, str]] = []
+    extracted_pairs = extract_all(contracts_dir, ctx.llm, cache_dir, errors=contract_errors)
     extract_duration_s = round(time.monotonic() - t0, 3)
 
     # Step 3 & 4: Map terms (cached) and evaluate covenants in code per contract
@@ -101,18 +120,24 @@ def run_check(xlsx_path: Path, ctx: RunContext) -> RunOutcome:
         if (not c.passed) or c.skipped
     ]
 
+    failed_labels: set[str] = set()
     for contract, ext_meta in extracted_pairs:
         for w in ext_meta.get("warnings", []):
-            prefixed_warnings.append(f"[{contract.contract_label}] {w}")
+            prefixed_warnings.append(f"[{contract.contract_label}] {render_notice(w, lang)}")
 
         if not contract.has_covenants:
             contracts_without_covenants.append(contract)
             continue
 
-        c_mappings, map_meta = map_terms(contract, plan, ctx.llm, cache_dir)
+        try:
+            c_mappings, map_meta = map_terms(contract, plan, ctx.llm, cache_dir)
+        except Exception as exc:  # one contract's failure must not hide the others' results
+            contract_errors.append((contract.contract_label, f"{type(exc).__name__}: {exc}"))
+            failed_labels.add(contract.contract_label)
+            continue
         all_mappings.extend(c_mappings)
         for w in map_meta.get("warnings", []):
-            prefixed_warnings.append(f"[{contract.contract_label}] {w}")
+            prefixed_warnings.append(f"[{contract.contract_label}] {render_notice(w, lang)}")
 
         mapping_step_records.append(
             {
@@ -127,16 +152,36 @@ def run_check(xlsx_path: Path, ctx: RunContext) -> RunOutcome:
     t_calc_start = time.monotonic()
     all_results: list[Result] = []
     for contract, _ext_meta in extracted_pairs:
-        if not contract.has_covenants:
+        if not contract.has_covenants or contract.contract_label in failed_labels:
             continue
-        c_results = evaluate_contract(contract, all_mappings, plan)
+        try:
+            c_results = evaluate_contract(contract, all_mappings, plan)
+        except Exception as exc:
+            contract_errors.append((contract.contract_label, f"{type(exc).__name__}: {exc}"))
+            continue
         all_results.extend(c_results)
     calc_duration_s = round(time.monotonic() - t_calc_start, 3)
+
+    used_cells: dict[str, PlanCellInfo] = {}
+    for r in all_results:
+        for cell_id in r.plan_cells:
+            item = plan.items.get(cell_id)
+            if item is not None:
+                used_cells[cell_id] = PlanCellInfo(
+                    id=item.id,
+                    sheet=item.sheet,
+                    cell=item.cell,
+                    label=item.label,
+                    value=item.value,
+                )
 
     report = RunReport(
         results=all_results,
         contracts_without_covenants=contracts_without_covenants,
         warnings=prefixed_warnings,
+        plan_meta={**plan.meta, "file_name": xlsx_path.name},
+        plan_cells=used_cells,
+        failed_contracts=[{"contract": c, "reason": r} for c, r in contract_errors],
     )
 
     total_duration_s = round(time.monotonic() - t_pipeline_start, 3)

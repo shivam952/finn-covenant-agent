@@ -1,0 +1,214 @@
+{
+  "mappings": [
+    {
+      "contract_file": "Vertrag_4_Konsortialkredit.pdf",
+      "quantity": "Eigenkapital",
+      "component": "Bilanzielles Eigenkapital (§ 266 Abs. 3 Buchst. A HGB)",
+      "item_ids": [
+        "Bilanz!D22"
+      ],
+      "rationale": "Bilanz!D22 weist das bilanzielle Eigenkapital gemäß § 266 Abs. 3 Buchst. A HGB zum Stichtag 31.12.2027 aus."
+    },
+    {
+      "contract_file": "Vertrag_4_Konsortialkredit.pdf",
+      "quantity": "Bilanzsumme",
+      "component": "Summe der Aktiva",
+      "item_ids": [
+        "Bilanz!D15"
+      ],
+      "rationale": "Bilanz!D15 erfasst die gesamte Bilanzsumme der Aktiva zum Stichtag 31.12.2027."
+    },
+    {
+      "contract_file": "Vertrag_4_Konsortialkredit.pdf",
+      "quantity": "Finanzverbindlichkeiten",
+      "component": "Aufgenommene Darlehen und Kredite",
+      "item_ids": [
+        "Bilanz!D28"
+      ],
+      "rationale": "Bilanz!D28 enthält sämtliche Verbindlichkeiten gegenüber Kreditinstituten aus aufgenommenen Darlehen zum 31.12.2027."
+    },
+    {
+      "contract_file": "Vertrag_4_Konsortialkredit.pdf",
+      "quantity": "Finanzverbindlichkeiten",
+      "component": "Anleihen und Schuldscheindarlehen",
+      "item_ids": [],
+      "rationale": "Der Wirtschaftsplan enthält keine Verbindlichkeiten aus Anleihen oder Schuldscheindarlehen."
+    },
+    {
+      "contract_file": "Vertrag_4_Konsortialkredit.pdf",
+      "quantity": "Finanzverbindlichkeiten",
+      "component": "Finanzierungsleasingverbindlichkeiten",
+      "item_ids": [],
+      "rationale": "Im Wirtschaftsplan sind keine Verbindlichkeiten aus Finanzierungsleasing ausgewiesen."
+    },
+    {
+      "contract_file": "Vertrag_4_Konsortialkredit.pdf",
+      "quantity": "Finanzverbindlichkeiten",
+      "component": "Forderungsverkäufe mit Rückgriff",
+      "item_ids": [],
+      "rationale": "Der Wirtschaftsplan enthält keine Position für Forderungsverkäufe mit Rückgriff."
+    },
+    {
+      "contract_file": "Vertrag_4_Konsortialkredit.pdf",
+      "quantity": "Finanzverbindlichkeiten",
+      "component": "Sonstige kreditähnliche Geschäfte",
+      "item_ids": [],
+      "rationale": "Der Wirtschaftsplan weist keine sonstigen kreditähnlichen Geschäfte aus."
+    },
+    {
+      "contract_file": "Vertrag_4_Konsortialkredit.pdf",
+      "quantity": "Finanzverbindlichkeiten",
+      "component": "Nachrangige Gesellschafterdarlehen",
+      "item_ids": [
+        "Bilanz!D29"
+      ],
+      "rationale": "Bilanz!D29 erfasst das nachrangige Gesellschafterdarlehen mit qualifiziertem Rangrücktritt, welches vertraglich aus den Finanzverbindlichkeiten auszunehmen ist."
+    },
+    {
+      "contract_file": "Vertrag_4_Konsortialkredit.pdf",
+      "quantity": "Liquide Mittel",
+      "component": "Kassenbestand und Guthaben bei Kreditinstituten",
+      "item_ids": [
+        "Bilanz!D12"
+      ],
+      "rationale": "Bilanz!D12 erfasst den Kassenbestand und die Guthaben bei Kreditinstituten zum 31.12.2027."
+    },
+    {
+      "contract_file": "Vertrag_4_Konsortialkredit.pdf",
+      "quantity": "EBITDA",
+      "component": "Jahresüberschuss bzw. Jahresfehlbetrag",
+      "item_ids": [
+        "GuV!D18"
+      ],
+      "rationale": "GuV!D18 bildet als Jahresüberschuss des Geschäftsjahres 2027 die vertragliche Ausgangsbasis für das EBITDA."
+    },
+    {
+      "contract_file": "Vertrag_4_Konsortialkredit.pdf",
+      "quantity": "EBITDA",
+      "component": "Steuern vom Einkommen und vom Ertrag",
+      "item_ids": [
+        "GuV!D17"
+      ],
+      "rationale": "GuV!D17 erfasst die hinzuzurechnenden Steuern vom Einkommen und vom Ertrag für das Geschäftsjahr 2027."
+    },
+    {
+      "contract_file": "Vertrag_4_Konsortialkredit.pdf",
+      "quantity": "EBITDA",
+      "component": "Zinsen und ähnliche Aufwendungen",
+      "item_ids": [
+        "GuV!D13"
+      ],
+      "rationale": "GuV!D13 enthält die Zinsen und ähnlichen Aufwendungen, da der Vertrag keine Bereinigung um nicht zahlungswirksame Zinsaufwendungen vorsieht."
+    },
+    {
+      "contract_file": "Vertrag_4_Konsortialkredit.pdf",
+      "quantity": "EBITDA",
+      "component": "Sonstige Zinsen und ähnliche Erträge",
+      "item_ids": [
+        "GuV!D12"
+      ],
+      "rationale": "GuV!D12 erfasst die abzuziehenden sonstigen Zinsen und ähnlichen Erträge des Geschäftsjahres 2027."
+    },
+    {
+      "contract_file": "Vertrag_4_Konsortialkredit.pdf",
+      "quantity": "EBITDA",
+      "component": "Abschreibungen auf immaterielle Vermögensgegenstände und Sachanlagen",
+      "item_ids": [
+        "GuV!D9"
+      ],
+      "rationale": "GuV!D9 enthält die hinzuzurechnenden Abschreibungen auf immaterielle Vermögensgegenstände und Sachanlagen für 2027."
+    },
+    {
+      "contract_file": "Vertrag_4_Konsortialkredit.pdf",
+      "quantity": "EBITDA",
+      "component": "Außerordentliche Aufwendungen (§ 285 Nr. 31 HGB)",
+      "item_ids": [],
+      "rationale": "Der Wirtschaftsplan weist keine gesonderten außerordentlichen Aufwendungen nach § 285 Nr. 31 HGB aus."
+    },
+    {
+      "contract_file": "Vertrag_4_Konsortialkredit.pdf",
+      "quantity": "EBITDA",
+      "component": "Außerordentliche Erträge (§ 285 Nr. 31 HGB)",
+      "item_ids": [],
+      "rationale": "Der Wirtschaftsplan weist keine gesonderten außerordentlichen Erträge nach § 285 Nr. 31 HGB aus."
+    }
+  ],
+  "meta": {
+    "purpose": "map_terms:Vertrag_4_Konsortialkredit.pdf",
+    "model": "google/gemini-3.8-flash",
+    "prompt_tokens": 5983,
+    "completion_tokens": 15720,
+    "latency_s": 103.534,
+    "attempts": 1,
+    "cache_hit": false,
+    "cache_key": "cc1451b3449135fe6e367bb5c2d5a166d06efd34cb54a038686a0f1b2be1a774",
+    "cache_file": "C:\\Users\\shiva\\OneDrive\\Desktop\\FINN\\finn-covenant-agent\\cache\\mapping_cc1451b3449135fe.json",
+    "warnings": [
+      {
+        "key": "carve_out_not_contained",
+        "params": {
+          "component": "Nachrangige Gesellschafterdarlehen",
+          "quantity": "Finanzverbindlichkeiten",
+          "cells": "Bilanz!D29"
+        }
+      },
+      {
+        "key": "empty_plan_line",
+        "params": {
+          "component": "Anleihen und Schuldscheindarlehen",
+          "quantity": "Finanzverbindlichkeiten",
+          "rationale": "Der Wirtschaftsplan enthält keine Verbindlichkeiten aus Anleihen oder Schuldscheindarlehen."
+        }
+      },
+      {
+        "key": "empty_plan_line",
+        "params": {
+          "component": "Finanzierungsleasingverbindlichkeiten",
+          "quantity": "Finanzverbindlichkeiten",
+          "rationale": "Im Wirtschaftsplan sind keine Verbindlichkeiten aus Finanzierungsleasing ausgewiesen."
+        }
+      },
+      {
+        "key": "empty_plan_line",
+        "params": {
+          "component": "Forderungsverkäufe mit Rückgriff",
+          "quantity": "Finanzverbindlichkeiten",
+          "rationale": "Der Wirtschaftsplan enthält keine Position für Forderungsverkäufe mit Rückgriff."
+        }
+      },
+      {
+        "key": "empty_plan_line",
+        "params": {
+          "component": "Sonstige kreditähnliche Geschäfte",
+          "quantity": "Finanzverbindlichkeiten",
+          "rationale": "Der Wirtschaftsplan weist keine sonstigen kreditähnlichen Geschäfte aus."
+        }
+      },
+      {
+        "key": "empty_plan_line",
+        "params": {
+          "component": "Nachrangige Gesellschafterdarlehen",
+          "quantity": "Finanzverbindlichkeiten",
+          "rationale": "Bilanz!D29 erfasst das nachrangige Gesellschafterdarlehen mit qualifiziertem Rangrücktritt, welches vertraglich aus den Finanzverbindlichkeiten auszunehmen ist."
+        }
+      },
+      {
+        "key": "empty_plan_line",
+        "params": {
+          "component": "Außerordentliche Aufwendungen (§ 285 Nr. 31 HGB)",
+          "quantity": "EBITDA",
+          "rationale": "Der Wirtschaftsplan weist keine gesonderten außerordentlichen Aufwendungen nach § 285 Nr. 31 HGB aus."
+        }
+      },
+      {
+        "key": "empty_plan_line",
+        "params": {
+          "component": "Außerordentliche Erträge (§ 285 Nr. 31 HGB)",
+          "quantity": "EBITDA",
+          "rationale": "Der Wirtschaftsplan weist keine gesonderten außerordentlichen Erträge nach § 285 Nr. 31 HGB aus."
+        }
+      }
+    ]
+  },
+  "created_at": "2026-11-07T00:08:13.169713+00:00"
+}

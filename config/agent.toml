@@ -1,0 +1,30 @@
+# Behaviour of the mail agent. No user-facing text here (see src/finn/texts/*.toml).
+
+[intake]
+# Only the first characters of the body go to the LLM (quoted history is usually below).
+max_body_chars = 6000
+
+[watch]
+# File in RUNS_DIR with the Message-IDs already handled, so every mail is answered exactly once
+# (survives restarts).
+processed_store_file = "processed.json"
+# Finn lists every mail since this many days ago (read or unread) and answers what is not yet
+# in the processed store. Mails received before the watcher started are only answered if they
+# are still unread, so a restart does not re-answer old mail.
+lookback_days = 1
+# Mails received up to this many minutes before the start count as "new" (clock skew, restarts).
+start_grace_minutes = 15
+# A reply that fails to send is retried on the next polls, at most this many times.
+max_send_attempts = 3
+
+[loop_protection]
+# Mails carrying any of these headers are never answered (own replies, auto-replies, bulk mail).
+ignore_if_header_present = ["x-finn-reply"]
+# Header -> values that mark automatic mail (compared case-insensitively, prefix match).
+ignore_if_header_value = { "auto-submitted" = ["auto-"], "precedence" = ["bulk", "junk", "list", "auto_reply"], "x-autoreply" = ["yes"] }
+# Senders whose address (part before @) contains one of these are never answered.
+ignore_sender_contains = ["mailer-daemon", "postmaster", "no-reply", "noreply", "do-not-reply", "donotreply"]
+
+[reply]
+# Reply to everyone on the original mail (To and Cc), not only the sender. Finn's own address is removed.
+reply_all = true

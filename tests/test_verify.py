@@ -45,7 +45,12 @@ def test_every_source_in_golden_covenants_verifies_true() -> None:
                 assert ds.verify_note is None
                 total_checked += 1
 
-    assert total_checked == 26
+    expected_sources = sum(
+        (1 if c.reason_source else 0) + len(c.quantities)
+        + sum(1 + len(k.definition_sources) for k in c.covenants)
+        for c in golden
+    )
+    assert total_checked == expected_sources > 0
 
 
 def test_tampered_quote_wrong_page_and_typographic_quotes() -> None:
@@ -60,7 +65,7 @@ def test_tampered_quote_wrong_page_and_typographic_quotes() -> None:
     )
     res_tampered = verify_source(tampered, pages)
     assert res_tampered.verified is False
-    assert res_tampered.verify_note == "Zitat im Vertrag nicht gefunden"
+    assert res_tampered.verify_note == "quote_not_found"
 
     # 2. Correct quote on wrong page (page 11 instead of page 6)
     wrong_page = Source(
@@ -71,7 +76,7 @@ def test_tampered_quote_wrong_page_and_typographic_quotes() -> None:
     res_wrong_page = verify_source(wrong_page, pages)
     assert res_wrong_page.verified is True
     assert res_wrong_page.page == 6
-    assert res_wrong_page.verify_note == "Seitenangabe korrigiert: S. 6 statt S. 11"
+    assert res_wrong_page.verify_note == "quote_page_corrected" and res_wrong_page.original_page == 11
 
     # 3. Typographic quote variant ("..." instead of „...“)
     ascii_quotes = Source(
@@ -111,4 +116,4 @@ def test_hyphenation_tolerant_quote_verification_on_contract_3_page_2() -> None:
     res_dehyph = verify_source(src, dehyphenated_pages)
     assert res_dehyph.verified is True
     assert res_dehyph.page == 2
-    assert res_dehyph.verify_note == "Abgleich ohne Satzzeichen/Trennstriche"
+    assert res_dehyph.verify_note == "quote_loose_match"

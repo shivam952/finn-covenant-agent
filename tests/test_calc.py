@@ -368,3 +368,21 @@ def test_missing_mapping_and_cyclic_ref_raise_calc_error() -> None:
     )
     with pytest.raises(CalcError, match="Zyklische Referenz"):
         evaluate_contract(cyclic_contract, [], plan)
+
+
+def test_non_positive_ebitda_is_a_breach_not_a_crash(tmp_path: Path) -> None:
+    """A distressed plan (EBITDA <= 0) must be reported as breached, never as an internal error or 'met'."""
+    from finn.render import render_stress
+
+    wb = openpyxl.load_workbook(SAMPLE_XLSX)
+    wb["GuV"]["D4"] = 250000  # revenue drop -> operating result and EBITDA turn negative
+    path = tmp_path / "distressed.xlsx"
+    wb.save(path)
+    plan = read_plan(path)
+    contracts, mappings, _ = _load_fixtures()
+    results = {r.covenant_id: r for c in contracts for r in evaluate_contract(c, mappings, plan)}
+    dyn = results["V4-DYNVG"]
+    assert dyn.value_defined is False and dyn.met is False
+    assert dyn.stress.kind == "not_applicable"
+    assert "nicht positiv" in render_stress(dyn.stress, lang="de")
+    assert results["V3-DSCR"].met is False  # negative numerator -> clearly breached

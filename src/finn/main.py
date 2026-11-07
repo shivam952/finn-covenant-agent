@@ -7,14 +7,16 @@ import json
 from pathlib import Path
 from typing import Any, Sequence
 
-from finn.audit import write_audit
 from finn.config import load_settings
 from finn.fmt import fmt_num, fmt_pct
 from finn.llm import make_llm
 from finn.mail.inbox import parse_eml_file
 from finn.models import Result
-from finn.pipeline import RunContext, generate_run_id, run_check
-from finn.render import render_stress
+from finn.handler import handle_email
+from finn.mail.inbox import ImapMailbox
+from finn.mail.outbox import send_message
+from finn.watcher import run_watch
+from finn.render import load_texts, render_stress
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -25,10 +27,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    subparsers.add_parser(
+    watch_parser = subparsers.add_parser(
         "watch",
         help="Poll IMAP inbox for covenant check orders and reply via SMTP",
     )
+    watch_parser.add_argument("--once", action="store_true", help="Poll a single time and exit")
 
     run_parser = subparsers.add_parser(
         "run",
@@ -45,6 +48,22 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Compare every calculated result against the expected answer key",
     )
+    run_parser.add_argument(
+        "--lang",
+        choices=["de", "en"],
+        default=None,
+        help="Reply language (default: REPLY_LANGUAGE from .env)",
+    )
+    run_parser.add_argument(
+        "--preview",
+        action="store_true",
+        help="Open the generated reply.html in the default browser",
+    )
+    run_parser.add_argument(
+        "--send",
+        action="store_true",
+        help="Also send the reply to the sender via SMTP (needs mail settings in .env)",
+    )
 
     return parser
 
@@ -60,9 +79,11 @@ def _print_report_table(
     lang: str = "de",
     amount_unit: str = "",
 ) -> None:
+    rt = load_texts(lang)["report"]
+    ct = load_texts(lang)["cli"]
     header = (
-        f"{'Vertrag':<38} | {'Covenant':<33} | {'Wert':>10} | "
-        f"{'Grenzwert':>11} | {'Headroom':>10} | {'eingehalten':<11} | Stress"
+        f"{rt['col_contract']:<38} | {rt['col_covenant']:<33} | {rt['col_value']:>10} | "
+        f"{rt['col_limit']:>11} | {rt['col_headroom']:>10} | {rt['col_status']:<11} | {rt['label_stress']}"
     )
     print(header)
     print("-" * len(header))
@@ -75,7 +96,7 @@ def _print_report_table(
         val_str = _fmt_result_val(r.value_reported, r.unit, 2, lang=lang)
         lim_str = f"{r.operator} {_fmt_result_val(r.limit, r.unit, 2, lang=lang)}"
         hr_str = _fmt_result_val(r.headroom, r.unit, 2, lang=lang)
-        met_str = "Ja" if r.met else "Nein"
+        met_str = ct["met_yes"] if r.met else ct["met_no"]
         stress_str = render_stress(r.stress, lang=lang, unit=amount_unit)
         print(
             f"{short_contract:<38} | {r.covenant_name:<33} | {val_str:>10} | "
@@ -141,72 +162,107 @@ def _compare_with_expected(audit: dict[str, Any]) -> bool:
     return all_ok
 
 
-def _run_eml_command(eml_path: Path, compare_expected: bool) -> int:
+def _smtp_sender(settings: Any) -> Any:
+    def _send(message: Any) -> None:
+        send_message(
+            message,
+            host=settings.smtp_host,
+            port=settings.smtp_port,
+            user=settings.mail_user,
+            password=settings.mail_app_password,
+        )
+
+    return _send
+
+
+def _run_eml_command(
+    eml_path: Path,
+    compare_expected: bool,
+    lang_override: str | None = None,
+    preview: bool = False,
+    send: bool = False,
+) -> int:
     eml_path = Path(eml_path)
+    settings = load_settings()
+    lang = lang_override or settings.reply_language
+    cli_texts = load_texts(lang)["cli"]
     if not eml_path.exists():
-        print(f"Fehler: Die E-Mail-Datei „{eml_path}“ wurde nicht gefunden.")
+        print(cli_texts["error_eml_not_found"].format(path=eml_path))
         return 2
 
     parsed_mail = parse_eml_file(eml_path)
-    xlsx_att = parsed_mail.first_xlsx_attachment()
-    if xlsx_att is None:
-        print(
-            "Fehler: Die E-Mail enthält keinen Excel-Anhang (.xlsx) mit dem Wirtschaftsplan. "
-            "Bitte senden Sie den Wirtschaftsplan als .xlsx-Datei."
-        )
+    try:
+        llm = make_llm(settings)
+    except ValueError as exc:  # missing key or model: say what to set instead of a traceback
+        print(cli_texts["error_no_llm"].format(detail=exc))
+        return 2
+    h = handle_email(parsed_mail, settings, llm, lang_override=lang_override)
+    if h.ignored_reason is not None:
+        print(cli_texts["ignored"].format(reason=h.ignored_reason))
+        return 0
+
+    lang = h.reply_lang or lang
+    cli_texts = load_texts(lang)["cli"]
+    print(cli_texts["decision"].format(kind=h.decision.kind if h.decision else "error"))
+    ok = True
+    if h.outcome is not None:
+        report = h.outcome.report
+        amount_unit = str(report.plan_meta.get("amount_unit", ""))
+        _print_report_table(report.results, lang=lang, amount_unit=amount_unit)
+        if report.contracts_without_covenants:
+            print("\n" + cli_texts["no_covenants_heading"])
+            for cc in report.contracts_without_covenants:
+                print(f"  - {cc.contract_label}: {cc.reason_if_none}")
+        if report.warnings:
+            print("\n" + cli_texts["warnings_heading"])
+            for w in report.warnings:
+                print(f"  ! {w}")
+        if compare_expected:
+            ok = _compare_with_expected(h.outcome.audit)
+    elif h.reply is not None:
+        print(h.reply.text)
+
+    print("\n" + cli_texts["audit_written"].format(path=h.audit_path))
+    print(cli_texts["reply_written"].format(path=h.files.get("reply.html")))
+
+    if send:
+        settings.require_mail()
+        _smtp_sender(settings)(h.message)
+        print(cli_texts["reply_sent"].format(to=h.message["To"]))
+
+    if preview and h.files.get("reply.html"):
+        import webbrowser
+
+        webbrowser.open(h.files["reply.html"].resolve().as_uri())
+
+    if h.error:
+        return 1
+    if h.outcome is None:
+        return 2  # no check was run (missing/wrong attachment, unrelated, clarification); a reply was prepared
+    return 0 if ok else 1
+
+
+def _watch_command(once: bool) -> int:
+    import logging
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    settings = load_settings()
+    cli_texts = load_texts(settings.reply_language)["cli"]
+    try:
+        settings.require_mail()
+        llm = make_llm(settings)
+    except ValueError as exc:
+        print(cli_texts["error_no_llm"].format(detail=exc))
         return 2
 
-    settings = load_settings()
-    run_id = generate_run_id()
-    run_dir = Path(settings.runs_dir) / run_id
-    run_dir.mkdir(parents=True, exist_ok=True)
-    saved_xlsx_path = run_dir / Path(xlsx_att.filename).name
-    saved_xlsx_path.write_bytes(xlsx_att.payload)
+    def _make_mailbox() -> ImapMailbox:
+        box = ImapMailbox(settings.imap_host, settings.imap_port, settings.mail_user, settings.mail_app_password)
+        box.connect()
+        return box
 
-    llm = make_llm(settings)
-    ctx = RunContext.create(settings=settings, llm=llm, run_id=run_id)
-    outcome = run_check(saved_xlsx_path, ctx)
-
-    outcome.audit["email"] = {
-        "eml_file": str(eml_path),
-        "from": parsed_mail.sender,
-        "subject": parsed_mail.subject,
-        "message_id": parsed_mail.message_id,
-        "date": parsed_mail.date,
-        "body_text": parsed_mail.body_text,
-        "attachment_filename": xlsx_att.filename,
-        "saved_xlsx_path": str(saved_xlsx_path),
-    }
-    audit_path = write_audit(outcome.audit, settings.runs_dir)
-
-    amount_unit = str(
-        outcome.audit.get("steps", {})
-        .get("read_plan", {})
-        .get("meta", {})
-        .get("amount_unit", "")
-    )
-    _print_report_table(
-        outcome.report.results,
-        lang=settings.reply_language,
-        amount_unit=amount_unit,
-    )
-
-    if outcome.report.contracts_without_covenants:
-        print("\nVerträge ohne Financial Covenants:")
-        for cc in outcome.report.contracts_without_covenants:
-            print(f"  - {cc.contract_label}: {cc.reason_if_none}")
-
-    if outcome.report.warnings:
-        print("\nHinweise / Warnungen:")
-        for w in outcome.report.warnings:
-            print(f"  ! {w}")
-
-    print(f"\nAudit-Log: {audit_path}")
-
-    if compare_expected:
-        _compare_with_expected(outcome.audit)
-
-    return 0
+    print(load_texts(settings.reply_language)["cli"]["watching"].format(
+        address=settings.finn_mail_address, seconds=settings.poll_seconds))
+    return run_watch(settings, _make_mailbox, _smtp_sender(settings), llm, once=once)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -215,10 +271,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "watch":
-        print("not implemented")
-        return 0
+        return _watch_command(bool(args.once))
     if args.command == "run":
-        return _run_eml_command(args.eml, bool(args.compare_expected))
+        return _run_eml_command(
+            args.eml,
+            bool(args.compare_expected),
+            lang_override=args.lang,
+            preview=bool(args.preview),
+            send=bool(args.send),
+        )
 
     parser.print_help()
     return 1

@@ -107,6 +107,7 @@ def evaluate_checks(
                 lhs=lhs_val,
                 rhs=rhs_val,
                 message_key="check_passed" if passed else "check_failed",
+                blocking=chk.blocking,
                 params={
                     "id": chk.id,
                     "description": chk.description,

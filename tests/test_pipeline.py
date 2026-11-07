@@ -114,7 +114,8 @@ def test_run_check_produces_expected_results_and_redacts_secrets_in_audit(
         report.contracts_without_covenants[0].contract_file
         == "Vertrag_1_Sparkasse_Investitionsdarlehen.pdf"
     )
-    assert report.warnings == []
+    # on a clean run the only notes are the transparent "no plan position, set to 0" lines
+    assert report.warnings and all("keine Planposition" in w for w in report.warnings)
 
     expected = json.loads(EXPECTED_PATH.read_text(encoding="utf-8"))
     by_name = {r.covenant_name: r for r in report.results}

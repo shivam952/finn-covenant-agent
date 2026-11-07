@@ -24,7 +24,8 @@ class Source(BaseModel):
     section: str
     quote: str
     verified: bool | None = None
-    verify_note: str | None = None
+    verify_note: str | None = None  # code-only: quote_too_short | quote_not_found | quote_loose_match | quote_page_corrected
+    original_page: int | None = None  # code-only: the page the LLM cited, if it was corrected
 
 
 class Component(BaseModel):
@@ -35,6 +36,9 @@ class Component(BaseModel):
     weight: float = 1.0
     ref: str | None = None
     definition: str
+    # True when the definition removes this item from a broader term in the same quantity
+    # ("X, ausgenommen Y" -> Y). Code subtracts it only from cells that actually contain it.
+    carve_out: bool = False
 
 
 class Quantity(BaseModel):
@@ -114,6 +118,8 @@ class PlanItem(BaseModel):
     is_expense: bool
     is_total: bool = False
     depends_on: list[str] = Field(default_factory=list)
+    # For a "davon" sub-line: the id of the line it is part of (the nearest line above it).
+    part_of: str | None = None
 
 
 class CheckResult(BaseModel):
@@ -127,6 +133,7 @@ class CheckResult(BaseModel):
     rhs: float | None = None
     message_key: str
     params: dict[str, Any] = Field(default_factory=dict)
+    blocking: bool = False
 
 
 class TermMapping(BaseModel):
@@ -145,6 +152,7 @@ class StressResult(BaseModel):
         "equity_loss",
         "numerator_change",
         "already_breached",
+        "not_applicable",
     ]
     driver_quantity: str
     pct: float | None = None
@@ -179,12 +187,14 @@ class FormulaParts(BaseModel):
 
 class Result(BaseModel):
     contract_label: str
+    contract_file: str = ""
     covenant_id: str
     covenant_name: str
     numerator_value: float
     denominator_value: float
     value_raw: float
     value_reported: float
+    value_defined: bool = True  # False if the denominator is not positive (e.g. EBITDA <= 0)
     limit: float
     operator: str
     unit: str
@@ -195,16 +205,30 @@ class Result(BaseModel):
     formula: FormulaParts
     contract_sources: list[Source]
     plan_cells: list[str]
+    plan_basis_note: str | None = None
     warnings: list[str] = Field(default_factory=list)
+
+
+class PlanCellInfo(BaseModel):
+    """Label and value of one plan cell used by a result (for the reply's source references)."""
+
+    id: str
+    sheet: str
+    cell: str
+    label: str
+    value: float
 
 
 class RunReport(BaseModel):
     results: list[Result]
     contracts_without_covenants: list[ContractCovenants]
     warnings: list[str]
+    plan_meta: dict[str, Any] = Field(default_factory=dict)
+    plan_cells: dict[str, PlanCellInfo] = Field(default_factory=dict)
+    failed_contracts: list[dict[str, str]] = Field(default_factory=list)  # {"contract", "reason"}
 
 
-_CODE_ONLY_SOURCE_FIELDS = ("verified", "verify_note")
+_CODE_ONLY_SOURCE_FIELDS = ("verified", "verify_note", "original_page")
 
 
 def _strip_code_only_fields(node: Any) -> None:

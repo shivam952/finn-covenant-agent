@@ -1,0 +1,60 @@
+{
+  "mappings": [
+    {
+      "contract_file": "Vertrag_2_Foerderbank_Foerderdarlehen.pdf",
+      "quantity": "Bilanzsumme",
+      "component": "Summe der Aktiva",
+      "item_ids": [
+        "Bilanz!D15"
+      ],
+      "rationale": "Entspricht der Summe der Aktiva zum Bilanzstichtag 31.12.2027 gemäß § 1 Abs. 1 des Vertrages."
+    },
+    {
+      "contract_file": "Vertrag_2_Foerderbank_Foerderdarlehen.pdf",
+      "quantity": "Eigenkapital",
+      "component": "Ausgewiesenes Eigenkapital gem. § 266 Abs. 3 Buchstabe A HGB",
+      "item_ids": [
+        "Bilanz!D22"
+      ],
+      "rationale": "Erfasst das gesamte bilanzielle Eigenkapital der Passivposition A gemäß § 266 Abs. 3 HGB zum Stichtag 31.12.2027."
+    },
+    {
+      "contract_file": "Vertrag_2_Foerderbank_Foerderdarlehen.pdf",
+      "quantity": "Eigenkapital",
+      "component": "Eingeforderte, aber noch nicht eingezahlte Einlagen",
+      "item_ids": [],
+      "rationale": "Der Wirtschaftsplan weist keine gesonderte Position für eingeforderte, noch nicht eingezahlte Einlagen aus."
+    },
+    {
+      "contract_file": "Vertrag_2_Foerderbank_Foerderdarlehen.pdf",
+      "quantity": "Sonderposten",
+      "component": "Sonderposten für Investitions- und Baukostenzuschüsse",
+      "item_ids": [
+        "Bilanz!D23"
+      ],
+      "rationale": "Entspricht dem in der Planbilanz gesondert ausgewiesenen Sonderposten für Investitions- und Baukostenzuschüsse zum Stichtag 31.12.2027."
+    }
+  ],
+  "meta": {
+    "purpose": "map_terms:Vertrag_2_Foerderbank_Foerderdarlehen.pdf",
+    "model": "google/gemini-3.8-flash",
+    "prompt_tokens": 4740,
+    "completion_tokens": 1242,
+    "latency_s": 9.667,
+    "attempts": 1,
+    "cache_hit": false,
+    "cache_key": "c22e1f6c2c29d9c3bc51580dde5c8721b2aa39499f05387c6419b85467ab78d7",
+    "cache_file": "C:\\Users\\shiva\\OneDrive\\Desktop\\FINN\\finn-covenant-agent\\cache\\mapping_c22e1f6c2c29d9c3.json",
+    "warnings": [
+      {
+        "key": "empty_plan_line",
+        "params": {
+          "component": "Eingeforderte, aber noch nicht eingezahlte Einlagen",
+          "quantity": "Eigenkapital",
+          "rationale": "Der Wirtschaftsplan weist keine gesonderte Position für eingeforderte, noch nicht eingezahlte Einlagen aus."
+        }
+      }
+    ]
+  },
+  "created_at": "2026-11-07T00:05:52.572816+00:00"
+}

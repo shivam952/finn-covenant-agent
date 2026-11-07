@@ -19,6 +19,13 @@
   },
   {
     "contract_file": "Vertrag_2_Foerderbank_Foerderdarlehen.pdf",
+    "quantity": "Wirtschaftliches Eigenkapital",
+    "component": "Eingeforderte, noch nicht eingezahlte Einlagen",
+    "item_ids": [],
+    "rationale": "Die Planbilanz weist keine eingeforderten, noch nicht eingezahlten Einlagen aus."
+  },
+  {
+    "contract_file": "Vertrag_2_Foerderbank_Foerderdarlehen.pdf",
     "quantity": "Bilanzsumme",
     "component": "Bilanzsumme",
     "item_ids": [

@@ -216,3 +216,126 @@ def test_extra_numeric_column_on_loan_schedule_is_read(tmp_path: Path) -> None:
     assert "Restlaufzeit (Jahre)" in plan.items["Finanzierung!H6"].label
     assert "Finanzierung!H15" in plan.items
     assert plan.items["Finanzierung!H15"].value == 12.0
+
+
+def test_formula_parser_handles_real_excel_syntax(tmp_path: Path) -> None:
+    """openpyxl-tokenizer based evaluator: absolute refs, quoted sheet names, parentheses, * and /, multi-arg SUM."""
+    import openpyxl
+
+    from finn.plan.reader import PlanFormatError, _WorkbookEvaluator
+
+    wb = openpyxl.Workbook()
+    a = wb.active
+    a.title = "Data Sheet"
+    a["A1"], a["A2"], a["A3"], a["B1"] = 10, 20, 30, 4
+    b = wb.create_sheet("Calc")
+    b["A1"] = "=SUM($A$2:A3)"  # refers to Calc!A2:A3 (empty → 0)
+    b["A2"] = "='Data Sheet'!$A$1*('Data Sheet'!A2+'Data Sheet'!A3)/'Data Sheet'!B1"
+    b["A3"] = "=SUM('Data Sheet'!A1:A3,'Data Sheet'!B1,5)"
+    b["A4"] = "=-('Data Sheet'!A1-'Data Sheet'!A2)"
+    b["A5"] = "=AVERAGE('Data Sheet'!A1:A3)"
+    path = tmp_path / "f.xlsx"
+    wb.save(path)
+    wb_f = openpyxl.load_workbook(path)
+    wb_v = openpyxl.load_workbook(path, data_only=True)
+    names = {n.lower(): n for n in wb_f.sheetnames}
+    ev = _WorkbookEvaluator({n: wb_f[n] for n in wb_f.sheetnames}, {n: wb_v[n] for n in wb_v.sheetnames}, names)
+
+    assert ev.eval_cell("Calc", "A2") == 10 * (20 + 30) / 4
+    assert ev.eval_cell("Calc", "A3") == 10 + 20 + 30 + 4 + 5
+    assert ev.eval_cell("Calc", "A4") == 10.0
+    with pytest.raises(PlanFormatError, match="Calc!A5"):
+        ev.eval_cell("Calc", "A5")  # unsupported function is never silently mis-evaluated
+
+
+def test_plan_column_found_by_keyword_not_by_pattern(tmp_path: Path) -> None:
+    """A header like 'Planwert 2027 (Entwurf)' is still recognised: year + a word starting with 'plan'."""
+    wb = openpyxl.load_workbook(SAMPLE_XLSX)
+    for ws in wb:
+        for row in ws.iter_rows(max_row=5):
+            for c in row:
+                if isinstance(c.value, str) and "Plan" in c.value and "2027" in c.value:
+                    c.value = "Planwert 2027 (Entwurf)"
+    path = tmp_path / "planwert.xlsx"
+    wb.save(path)
+    plan = read_plan(path)
+    assert plan.meta["plan_year"] == 2027
+    assert plan.items["Bilanz!D15"].value == 313200
+
+
+def test_amount_unit_detected_from_cover_sheet_when_not_configured(tmp_path: Path) -> None:
+    """With amount_unit blank in the layout, the unit comes from the cover sheet ('Alle Beträge in T€ …')."""
+    original = (REPO_ROOT / "config" / "plan_layout.toml").read_text(encoding="utf-8")
+    assert 'amount_unit = "T€"' in original
+    layout_path = tmp_path / "layout.toml"
+    layout_path.write_text(original.replace('amount_unit = "T€"', 'amount_unit = ""'), encoding="utf-8")
+    plan = read_plan(SAMPLE_XLSX, layout_path=layout_path)
+    assert plan.meta["amount_unit"] == "T€"
+
+
+def test_expense_typed_as_formula_without_refs_is_still_an_expense(tmp_path: Path) -> None:
+    """'=-4930-170' is an input, not a subtotal: it must be normalised like a typed -5100."""
+    wb = openpyxl.load_workbook(SAMPLE_XLSX)
+    wb["GuV"]["D13"] = "=-4930-170"
+    path = tmp_path / "typed_formula.xlsx"
+    wb.save(path)
+    plan = read_plan(path)
+    item = plan.items["GuV!D13"]
+    assert item.value == 5100 and item.is_expense and not item.is_total
+    assert all(c.passed for c in plan.checks)
+
+
+def test_sign_error_in_plan_blocks_the_calculation(tmp_path: Path) -> None:
+    """A subtotal that contradicts its sheet (here a hard-typed wrong Jahresüberschuss) must block, not report."""
+    from finn.config import Settings
+    from finn.pipeline import PlanInconsistentError, RunContext, run_check
+    from golden_llm import GoldenFakeLLM
+
+    wb = openpyxl.load_workbook(SAMPLE_XLSX)
+    wb["GuV"]["D18"] = -10700  # sign error typed over the formula
+    path = tmp_path / "sign_error.xlsx"
+    wb.save(path)
+    settings = Settings(llm_api_key="x", llm_model="fake", contracts_dir=REPO_ROOT / "data" / "contracts",
+                        cache_dir=tmp_path / "cache", runs_dir=tmp_path / "runs")
+    with pytest.raises(PlanInconsistentError) as exc:
+        run_check(path, RunContext.create(settings=settings, llm=GoldenFakeLLM(), run_id="t"))
+    assert "ebitda_identitaet" in str(exc.value)
+
+
+def test_unsupported_function_falls_back_to_excels_saved_value(tmp_path: Path) -> None:
+    """ROUND(...) is not evaluated by Finn: the cached Excel value is used and a note is produced."""
+    import zipfile
+
+    # Write a ROUND formula into the sheet XML directly, keeping Excel's cached value (<v>).
+    src = SAMPLE_XLSX
+    dst = tmp_path / "round.xlsx"
+    with zipfile.ZipFile(src) as zin, zipfile.ZipFile(dst, "w") as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename.startswith("xl/worksheets/") and b'r="D11"' in data and b"SUM(D4:D10)" in data:
+                data = data.replace(b'<f aca="false">SUM(D4:D10)</f>', b'<f aca="false">ROUND(SUM(D4:D10),0)</f>')
+            zout.writestr(item, data)
+    plan = read_plan(dst)
+    assert plan.items["GuV!D11"].value == 18700
+    notes = [c for c in plan.checks if c.message_key == "formula_unsupported_cached"]
+    assert notes and notes[0].params["cell"] == "GuV!D11" and not notes[0].blocking
+    assert "GuV!D9" in plan.items["GuV!D11"].depends_on  # structure kept for double-count checks
+
+
+def test_two_plan_years_default_to_the_first_and_honour_the_requested_one(tmp_path: Path) -> None:
+    wb = openpyxl.load_workbook(SAMPLE_XLSX)
+    for name in ("GuV", "Bilanz"):
+        ws = wb[name]
+        hdr = ws["D3"].value
+        ws["E3"] = hdr.replace("2027", "2028")
+        for r in range(4, ws.max_row + 1):
+            v = ws.cell(r, 4).value
+            if isinstance(v, (int, float)):
+                ws.cell(r, 5).value = v * 2
+            elif isinstance(v, str) and v.startswith("="):
+                ws.cell(r, 5).value = v.replace("D", "E")
+    path = tmp_path / "two_years.xlsx"
+    wb.save(path)
+    assert read_plan(path).meta["plan_year"] == 2027
+    later = read_plan(path, plan_year=2028)
+    assert later.meta["plan_year"] == 2028 and later.items["Bilanz!E15"].value == 2 * 313200

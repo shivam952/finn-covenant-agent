@@ -2,23 +2,34 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Any
 
 import openpyxl
-from openpyxl.utils import column_index_from_string, get_column_letter
+from openpyxl.formula import Tokenizer
+from openpyxl.formula.tokenizer import Token
+from openpyxl.utils import get_column_letter
+from openpyxl.utils.cell import coordinate_from_string, range_boundaries
 from openpyxl.worksheet.worksheet import Worksheet
 from pydantic import BaseModel, Field
 
 from finn.fmt import fmt_num
 from finn.models import CheckResult, PlanItem
 from finn.plan.checks import evaluate_checks
+from finn.notices import notice, render_notice
 from finn.plan.layout import PlanLayoutConfig, RoleConfig, load_plan_layout
 
 
 class PlanFormatError(Exception):
-    """Raised when the Excel workbook is missing required sheets, columns, or has unsupported formulas."""
+    """The workbook cannot be used. Carries a notice key + params; the wording is in texts/*.toml."""
+
+    def __init__(self, key: str, **params: Any) -> None:
+        self.key = key
+        self.params = params
+        super().__init__(render_notice(notice(key, **params), "de"))
+
+    def render(self, lang: str) -> str:
+        return render_notice(notice(self.key, **self.params), lang)
 
 
 class PlanData(BaseModel):
@@ -29,68 +40,18 @@ class PlanData(BaseModel):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
-_CELL_REF_RE = re.compile(
-    r"^(?:(?:'(?P<squote>[^']+)'|(?P<sheet>[A-Za-z0-9_ÄÖÜäöüß]+))!)?"
-    r"\$?(?P<col>[A-Za-z]{1,3})\$?(?P<row>\d+)$"
-)
-_SUM_RE = re.compile(
-    r"^SUM\(\s*"
-    r"(?:(?:'(?P<squote>[^']+)'|(?P<sheet>[A-Za-z0-9_ÄÖÜäöüß]+))!)?"
-    r"\$?(?P<col1>[A-Za-z]{1,3})\$?(?P<row1>\d+)"
-    r"\s*:\s*"
-    r"\$?(?P<col2>[A-Za-z]{1,3})\$?(?P<row2>\d+)"
-    r"\s*\)$",
-    re.IGNORECASE,
-)
-_NUMBER_RE = re.compile(r"^\d+(?:\.\d+)?$")
+_SUPPORTED_FUNCTIONS = frozenset({"SUM"})
 
 
-def _split_top_level_add_sub(expr: str) -> list[tuple[int, str]] | None:
-    """Split an expression into (sign, term_str) along top-level '+' and '-' operators."""
-    expr = expr.strip()
-    if not expr:
-        return None
-
-    terms: list[tuple[int, str]] = []
-    depth = 0
-    in_quote = False
-    current_sign = 1
-    start = 0
-    i = 0
-
-    if expr[0] in "+-":
-        current_sign = -1 if expr[0] == "-" else 1
-        i = 1
-        start = 1
-
-    while i < len(expr):
-        ch = expr[i]
-        if ch == "'":
-            in_quote = not in_quote
-        elif not in_quote:
-            if ch == "(":
-                depth += 1
-            elif ch == ")":
-                depth -= 1
-                if depth < 0:
-                    return None
-            elif depth == 0 and ch in "+-":
-                part = expr[start:i].strip()
-                if not part:
-                    return None
-                terms.append((current_sign, part))
-                current_sign = -1 if ch == "-" else 1
-                start = i + 1
-        i += 1
-
-    if depth != 0 or in_quote:
-        return None
-
-    last_part = expr[start:].strip()
-    if not last_part:
-        return None
-    terms.append((current_sign, last_part))
-    return terms
+def _split_ref(ref: str) -> tuple[str | None, str]:
+    """Split 'Sheet!A1:B2' / "'My Sheet'!A1" / 'A1' into (sheet or None, area without $)."""
+    sheet_part, sep, area = ref.rpartition("!")
+    sheet = None
+    if sep:
+        sheet = sheet_part
+        if sheet.startswith("'") and sheet.endswith("'"):
+            sheet = sheet[1:-1].replace("''", "'")
+    return sheet, area.replace("$", "")
 
 
 class _WorkbookEvaluator:
@@ -113,9 +74,7 @@ class _WorkbookEvaluator:
     def _resolve_sheet(self, name: str, origin_cell: str) -> str:
         key = name.strip().lower()
         if key not in self.canonical_map:
-            raise PlanFormatError(
-                f"Unbekanntes Tabellenblatt „{name}“ in Formel der Zelle {origin_cell}."
-            )
+            raise PlanFormatError("plan_unsupported_cell", cell=origin_cell, detail=f"{name}!…")
         return self.canonical_map[key]
 
     def eval_cell(
@@ -129,9 +88,7 @@ class _WorkbookEvaluator:
         if key in self.memo:
             return self.memo[key]
         if key in visiting:
-            raise PlanFormatError(
-                f"Zyklische Formelreferenz erkannt bei Zelle {sheet}!{coord_up}."
-            )
+            raise PlanFormatError("plan_unsupported_cell", cell=f"{sheet}!{coord_up}", detail="↻")
 
         ws_f = self.sheets_f[sheet]
         ws_v = self.sheets_v[sheet]
@@ -142,37 +99,50 @@ class _WorkbookEvaluator:
             self.direct_deps[key] = []
             return 0.0
         if isinstance(raw, bool):
-            raise PlanFormatError(f"Ungültiger Wahrheitswert in Zelle {sheet}!{coord_up}.")
+            raise PlanFormatError("plan_unsupported_cell", cell=f"{sheet}!{coord_up}", detail=str(raw))
         if isinstance(raw, (int, float)):
             val = float(raw)
             self.memo[key] = val
             self.direct_deps[key] = []
             return val
         if not isinstance(raw, str):
-            raise PlanFormatError(
-                f"Nicht unterstützter Zelltyp in {sheet}!{coord_up}: {type(raw).__name__}."
-            )
+            raise PlanFormatError("plan_unsupported_cell", cell=f"{sheet}!{coord_up}", detail=type(raw).__name__)
 
         text = raw.strip()
         if not text.startswith("="):
-            raise PlanFormatError(
-                f"Nicht-numerischer Text in {sheet}!{coord_up}: „{text}“."
-            )
+            raise PlanFormatError("plan_unsupported_cell", cell=f"{sheet}!{coord_up}", detail=text)
 
-        expr = text[1:].strip()
         next_visiting = visiting | {key}
-        terms = _split_top_level_add_sub(expr)
-        if not terms:
-            raise PlanFormatError(
-                f"Nicht unterstützte Formel in {sheet}!{coord_up}: {text}"
+        tokens: list[Token] = []
+        try:
+            tokens = [
+                t for t in Tokenizer(text).items if t.type != Token.WSPACE
+            ]
+            parser = _FormulaParser(self, sheet, coord_up, text, tokens, next_visiting)
+            total = parser.parse()
+            deps = parser.deps
+        except PlanFormatError:
+            # Unsupported function (e.g. ROUND) or syntax: use the value Excel itself saved, if
+            # there is one, and say so. Without a saved value the cell cannot be trusted.
+            if not isinstance(cached, (int, float)) or isinstance(cached, bool):
+                raise
+            total = float(cached)
+            deps = self._referenced_cells(sheet, coord_up, tokens)
+            self.cache_checks.append(
+                CheckResult(
+                    id=f"formula_cached_{sheet}_{coord_up}",
+                    description=f"{sheet}!{coord_up}",
+                    passed=False,  # shown as a note in the reply; not blocking
+                    skipped=False,
+                    message_key="formula_unsupported_cached",
+                    params={"cell": f"{sheet}!{coord_up}", "formula": text, "cached": total},
+                )
             )
-
-        total = 0.0
-        deps: list[tuple[str, str]] = []
-        for sign, term_str in terms:
-            t_val, t_deps = self._eval_term(sheet, coord_up, term_str, next_visiting)
-            total += sign * t_val
-            deps.extend(t_deps)
+            self.direct_deps[key] = deps
+            self.memo[key] = total
+            return total
+        except Exception as exc:  # openpyxl raises a plain error on malformed formulas
+            raise PlanFormatError("plan_unsupported_cell", cell=f"{sheet}!{coord_up}", detail=text) from exc
 
         self.direct_deps[key] = deps
 
@@ -205,58 +175,53 @@ class _WorkbookEvaluator:
         self.memo[key] = total
         return total
 
-    def _eval_term(
+    def _referenced_cells(
+        self, sheet: str, coord: str, tokens: list[Token]
+    ) -> list[tuple[str, str]]:
+        """Cells a formula refers to (without evaluating them), for dependency tracking."""
+        cells: list[tuple[str, str]] = []
+        for tok in tokens:
+            if tok.type != Token.OPERAND or tok.subtype != Token.RANGE:
+                continue
+            ref_sheet, area = _split_ref(tok.value)
+            try:
+                target = self._resolve_sheet(ref_sheet, f"{sheet}!{coord}") if ref_sheet else sheet
+                min_col, min_row, max_col, max_row = range_boundaries(area)
+            except (PlanFormatError, ValueError, TypeError):
+                continue
+            if None in (min_col, min_row, max_col, max_row):
+                continue
+            for r in range(int(min_row), int(max_row) + 1):
+                for c in range(int(min_col), int(max_col) + 1):
+                    cells.append((target, f"{get_column_letter(c)}{r}"))
+        return cells
+
+    def eval_ref(
         self,
         sheet: str,
-        coord: str,
-        term: str,
+        origin: str,
+        ref: str,
         visiting: frozenset[tuple[str, str]],
     ) -> tuple[float, list[tuple[str, str]]]:
-        origin = f"{sheet}!{coord}"
-        m_sum = _SUM_RE.match(term)
-        if m_sum:
-            target_sheet_raw = m_sum.group("squote") or m_sum.group("sheet")
-            target_sheet = (
-                self._resolve_sheet(target_sheet_raw, origin)
-                if target_sheet_raw
-                else sheet
-            )
-            col1 = column_index_from_string(m_sum.group("col1").upper())
-            row1 = int(m_sum.group("row1"))
-            col2 = column_index_from_string(m_sum.group("col2").upper())
-            row2 = int(m_sum.group("row2"))
-            if col1 > col2 or row1 > row2:
-                raise PlanFormatError(
-                    f"Ungültiger Bereich in SUM-Formel in {origin}: ={term}"
-                )
-            acc = 0.0
-            deps: list[tuple[str, str]] = []
-            for r in range(row1, row2 + 1):
-                for c in range(col1, col2 + 1):
-                    c_coord = f"{get_column_letter(c)}{r}"
-                    cell_val = self.sheets_f[target_sheet][c_coord].value
-                    if cell_val is None:
-                        continue
-                    acc += self.eval_cell(target_sheet, c_coord, visiting)
-                    deps.append((target_sheet, c_coord))
-            return acc, deps
-
-        m_ref = _CELL_REF_RE.match(term)
-        if m_ref:
-            target_sheet_raw = m_ref.group("squote") or m_ref.group("sheet")
-            target_sheet = (
-                self._resolve_sheet(target_sheet_raw, origin)
-                if target_sheet_raw
-                else sheet
-            )
-            target_coord = f"{m_ref.group('col').upper()}{int(m_ref.group('row'))}"
-            val = self.eval_cell(target_sheet, target_coord, visiting)
-            return val, [(target_sheet, target_coord)]
-
-        if _NUMBER_RE.match(term):
-            return float(term), []
-
-        raise PlanFormatError(f"Nicht unterstützte Formel in {origin}: ={term}")
+        """Value of a cell or the sum of an area; also returns the cells it depends on."""
+        ref_sheet, area = _split_ref(ref)
+        target_sheet = self._resolve_sheet(ref_sheet, origin) if ref_sheet else sheet
+        try:
+            min_col, min_row, max_col, max_row = range_boundaries(area)
+        except (ValueError, TypeError) as exc:
+            raise PlanFormatError("plan_unsupported_cell", cell=origin, detail=ref) from exc
+        if None in (min_col, min_row, max_col, max_row):
+            raise PlanFormatError("plan_unsupported_cell", cell=origin, detail=ref)
+        acc = 0.0
+        deps: list[tuple[str, str]] = []
+        for r in range(int(min_row), int(max_row) + 1):
+            for c in range(int(min_col), int(max_col) + 1):
+                c_coord = f"{get_column_letter(c)}{r}"
+                if self.sheets_f[target_sheet][c_coord].value is None:
+                    continue
+                acc += self.eval_cell(target_sheet, c_coord, visiting)
+                deps.append((target_sheet, c_coord))
+        return acc, deps
 
     def transitive_dependencies(
         self,
@@ -281,6 +246,106 @@ class _WorkbookEvaluator:
 
         _walk(start_key)
         return ordered
+
+
+class _FormulaParser:
+    """Recursive-descent evaluator over openpyxl's formula tokens.
+
+    Grammar: expr := term (('+'|'-') term)* ; term := factor (('*'|'/') factor)* ;
+    factor := ('+'|'-') factor | NUMBER | RANGE | '(' expr ')' | SUM '(' expr (',' expr)* ')'.
+    Anything else raises PlanFormatError naming the cell, so an unsupported formula is never
+    silently mis-evaluated.
+    """
+
+    def __init__(
+        self,
+        evaluator: _WorkbookEvaluator,
+        sheet: str,
+        coord: str,
+        text: str,
+        tokens: list[Token],
+        visiting: frozenset[tuple[str, str]],
+    ) -> None:
+        self.ev = evaluator
+        self.sheet = sheet
+        self.origin = f"{sheet}!{coord}"
+        self.text = text
+        self.tokens = tokens
+        self.pos = 0
+        self.visiting = visiting
+        self.deps: list[tuple[str, str]] = []
+
+    def _fail(self) -> PlanFormatError:
+        return PlanFormatError("plan_unsupported_cell", cell=self.origin, detail=self.text)
+
+    def _peek(self) -> Token | None:
+        return self.tokens[self.pos] if self.pos < len(self.tokens) else None
+
+    def _next(self) -> Token:
+        tok = self._peek()
+        if tok is None:
+            raise self._fail()
+        self.pos += 1
+        return tok
+
+    def parse(self) -> float:
+        value = self._expr()
+        if self._peek() is not None:
+            raise self._fail()
+        return value
+
+    def _expr(self) -> float:
+        value = self._term()
+        while (tok := self._peek()) is not None and tok.type == Token.OP_IN and tok.value in "+-":
+            self.pos += 1
+            rhs = self._term()
+            value = value + rhs if tok.value == "+" else value - rhs
+        return value
+
+    def _term(self) -> float:
+        value = self._factor()
+        while (tok := self._peek()) is not None and tok.type == Token.OP_IN and tok.value in "*/":
+            self.pos += 1
+            rhs = self._factor()
+            if tok.value == "*":
+                value *= rhs
+            else:
+                if rhs == 0:
+                    raise PlanFormatError("plan_unsupported_cell", cell=self.origin, detail=self.text)
+                value /= rhs
+        return value
+
+    def _factor(self) -> float:
+        tok = self._next()
+        if tok.type == Token.OP_PRE and tok.value in "+-":
+            inner = self._factor()
+            return -inner if tok.value == "-" else inner
+        if tok.type == Token.OPERAND and tok.subtype == Token.NUMBER:
+            return float(tok.value)
+        if tok.type == Token.OPERAND and tok.subtype == Token.RANGE:
+            value, deps = self.ev.eval_ref(self.sheet, self.origin, tok.value, self.visiting)
+            self.deps.extend(deps)
+            return value
+        if tok.type == Token.PAREN and tok.subtype == Token.OPEN:
+            value = self._expr()
+            close = self._next()
+            if close.type != Token.PAREN or close.subtype != Token.CLOSE:
+                raise self._fail()
+            return value
+        if tok.type == Token.FUNC and tok.subtype == Token.OPEN:
+            name = tok.value[:-1].upper()
+            if name not in _SUPPORTED_FUNCTIONS:
+                raise self._fail()
+            total = self._expr()
+            while True:
+                nxt = self._next()
+                if nxt.type == Token.SEP and nxt.value == ",":
+                    total += self._expr()
+                    continue
+                if nxt.type == Token.FUNC and nxt.subtype == Token.CLOSE:
+                    return total
+                raise self._fail()
+        raise self._fail()
 
 
 def _is_numeric_or_formula(val: Any) -> bool:
@@ -322,19 +387,13 @@ def _resolve_role_sheet(
 
     if not scores:
         found = ", ".join(wb_f.sheetnames)
-        raise PlanFormatError(
-            f"Für die Rolle „{role_name}“ konnte kein passendes Tabellenblatt ermittelt werden "
-            f"(vorhandene Blätter: {found})."
-        )
+        raise PlanFormatError("plan_role_sheet_missing", role=role_name, sheets=found)
 
     best_score = max(scores.values())
     winners = [s for s, sc in scores.items() if sc == best_score]
     if len(winners) > 1:
         found = ", ".join(wb_f.sheetnames)
-        raise PlanFormatError(
-            f"Mehrdeutige Blatt-Zuordnung für Rolle „{role_name}“ zwischen {winners} "
-            f"(vorhandene Blätter: {found})."
-        )
+        raise PlanFormatError("plan_role_sheet_ambiguous", role=role_name, candidates=winners)
     return winners[0]
 
 
@@ -350,17 +409,28 @@ def _scan_sheet_headers(ws: Worksheet, max_rows: int = 10) -> list[tuple[int, in
     return out
 
 
-def _detect_years_on_sheet(ws: Worksheet, patterns: list[str]) -> set[int]:
-    """Extract all 4-digit years matching any plan-column pattern in the top rows of ws."""
-    compiled = [
-        re.compile(pat.replace("{year}", r"(?P<year>\d{4})"), re.IGNORECASE)
-        for pat in patterns
-    ]
+def _header_words(text: str) -> list[str]:
+    """Lower-case words of a header: every non-alphanumeric character separates words."""
+    cleaned = "".join(ch if ch.isalnum() else " " for ch in text.casefold())
+    return cleaned.split()
+
+
+def _header_years(words: list[str]) -> set[int]:
+    return {int(w) for w in words if len(w) == 4 and w.isdigit()}
+
+
+def _is_plan_header(words: list[str], keywords: list[str]) -> bool:
+    kws = [k.casefold() for k in keywords]
+    return any(w.startswith(k) for w in words for k in kws)
+
+
+def _detect_years_on_sheet(ws: Worksheet, keywords: list[str]) -> set[int]:
+    """All years that appear in a plan-column header (year + plan keyword) in the top rows of ws."""
     years: set[int] = set()
     for _, _, text in _scan_sheet_headers(ws):
-        for rx in compiled:
-            for m in rx.finditer(text):
-                years.add(int(m.group("year")))
+        words = _header_words(text)
+        if _is_plan_header(words, keywords):
+            years |= _header_years(words)
     return years
 
 
@@ -368,23 +438,19 @@ def _find_plan_column_for_year(
     ws: Worksheet,
     sheet_name: str,
     plan_year: int,
-    patterns: list[str],
+    keywords: list[str],
 ) -> tuple[int, int, str]:
-    """Locate (header_row, col_index, header_text) matching plan_year on ws."""
-    year_str = re.escape(str(plan_year))
-    compiled = [
-        re.compile(pat.replace("{year}", year_str), re.IGNORECASE)
-        for pat in patterns
-    ]
+    """Locate (header_row, col_index, header_text) of the plan column for plan_year on ws."""
     headers = _scan_sheet_headers(ws)
     for r, c, text in headers:
-        if any(rx.search(text) for rx in compiled):
+        words = _header_words(text)
+        if plan_year in _header_years(words) and _is_plan_header(words, keywords):
             return r, c, text
 
     found_headers = [t for _, col, t in headers if col >= 2]
     raise PlanFormatError(
-        f"Im Blatt „{sheet_name}“ wurde keine Planspalte für das Jahr {plan_year} gefunden "
-        f"(gefundene Spaltenköpfe: {', '.join(found_headers) if found_headers else 'keine'})."
+        "plan_year_column_missing", sheet=sheet_name, year=plan_year,
+        headers=", ".join(found_headers) if found_headers else "–",
     )
 
 
@@ -414,9 +480,7 @@ def _find_all_numeric_columns(
             best_headers = candidate
 
     if best_row is None or not best_headers:
-        raise PlanFormatError(
-            f"Im Blatt „{sheet_name}“ wurde keine gültige Kopfzeile mit numerischen Datenspalten gefunden."
-        )
+        raise PlanFormatError("plan_no_header_row", sheet=sheet_name)
     return best_row, best_headers
 
 
@@ -427,17 +491,25 @@ def _detect_amount_unit(
     """Return configured amount_unit, or detect from cover sheet if layout.amount_unit is empty."""
     if layout.amount_unit:
         return layout.amount_unit
-    if layout.cover_unit_pattern:
-        rx = re.compile(layout.cover_unit_pattern, re.IGNORECASE)
+    markers = [m.casefold() for m in layout.cover_unit_markers]
+    candidates = sorted(layout.unit_candidates, key=len, reverse=True)
+    if markers and candidates:
         for sheet_name in wb_f.sheetnames:
             ws = wb_f[sheet_name]
             for r in range(1, min(25, ws.max_row) + 1):
                 for c in range(1, min(10, ws.max_column) + 1):
                     val = ws.cell(r, c).value
-                    if isinstance(val, str):
-                        m = rx.search(val)
-                        if m:
-                            return m.group(1).strip()
+                    if not isinstance(val, str):
+                        continue
+                    low = val.casefold()
+                    for marker in markers:
+                        idx = low.find(marker)
+                        if idx < 0:
+                            continue
+                        rest = val[idx + len(marker):]
+                        hits = [(rest.find(u), u) for u in candidates if rest.find(u) >= 0]
+                        if hits:
+                            return min(hits)[1]
     return ""
 
 
@@ -449,7 +521,7 @@ def read_plan(
     """Read a business plan workbook, evaluate formulas, normalise signs, and run checks."""
     path = Path(path)
     if not path.exists():
-        raise PlanFormatError(f"Die Wirtschaftsplan-Datei „{path}“ wurde nicht gefunden.")
+        raise PlanFormatError("plan_file_missing", file=path.name)
 
     layout = load_plan_layout(layout_path)
 
@@ -457,9 +529,7 @@ def read_plan(
         wb_f = openpyxl.load_workbook(path, data_only=False)
         wb_v = openpyxl.load_workbook(path, data_only=True)
     except Exception as exc:
-        raise PlanFormatError(
-            f"Die Wirtschaftsplan-Datei „{path.name}“ konnte nicht als Excel-Arbeitsmappe geöffnet werden: {exc}"
-        ) from exc
+        raise PlanFormatError("plan_file_unreadable", file=path.name) from exc
 
     canonical_map: dict[str, str] = {}
     sheets_f: dict[str, Worksheet] = {}
@@ -487,7 +557,7 @@ def read_plan(
         found_headers_by_sheet: dict[str, list[str]] = {}
         for _, sname in plan_year_roles:
             ws = sheets_f[sname]
-            year_sets.append(_detect_years_on_sheet(ws, layout.plan_column.patterns))
+            year_sets.append(_detect_years_on_sheet(ws, layout.plan_column.keywords))
             found_headers_by_sheet[sname] = [
                 t for _, col, t in _scan_sheet_headers(ws) if col >= 2
             ]
@@ -497,12 +567,14 @@ def read_plan(
                 f"{s}: {', '.join(h) if h else 'keine'}"
                 for s, h in found_headers_by_sheet.items()
             )
-            raise PlanFormatError(
-                f"Es konnte kein gemeinsames Planjahr erkannt werden (gefundene Spaltenköpfe: {details})."
-            )
-        target_year = max(common_years)
+            raise PlanFormatError("plan_no_common_year", headers=details)
+        # Several plan years (e.g. a medium-term plan): the first plan year is the one the
+        # Wirtschaftsplan is about. The caller passes the year from the order email if one is named.
+        target_year = min(common_years)
+        available_years = sorted(common_years)
     else:
         target_year = plan_year
+        available_years = [plan_year]
 
     evaluator = _WorkbookEvaluator(sheets_f, sheets_v, canonical_map)
     items: dict[str, PlanItem] = {}
@@ -515,7 +587,7 @@ def read_plan(
 
         if role_cfg.column_mode == "plan_year":
             header_row, col_idx, header_text = _find_plan_column_for_year(
-                ws, sheet_name, target_year, layout.plan_column.patterns
+                ws, sheet_name, target_year, layout.plan_column.keywords
             )
             col_letter = get_column_letter(col_idx)
             sheet_headers[sheet_name] = (
@@ -532,13 +604,12 @@ def read_plan(
                     continue
                 coord = f"{col_letter}{r}"
                 raw_value = evaluator.eval_cell(sheet_name, coord)
-                is_formula = isinstance(cell_val, str) and cell_val.strip().startswith("=")
-                is_expense = (
-                    role_cfg.normalise_expenses
-                    and (not is_formula)
-                    and (raw_value < 0)
-                )
-                norm_value = abs(raw_value) if is_expense else raw_value
+                # An input line is any cell that does not refer to other cells; a typed
+                # "=-4930-170" is an input too. Only subtotals (cells built from other cells)
+                # keep their sign, so the rule does not depend on how a number was typed.
+                is_formula = bool(evaluator.direct_deps.get((sheet_name, coord.upper())))
+                is_expense = False  # decided after all cells are read (structure-based)
+                norm_value = raw_value
                 item_id = f"{sheet_name}!{coord}"
                 items[item_id] = PlanItem(
                     id=item_id,
@@ -573,13 +644,9 @@ def read_plan(
                         continue
                     coord = f"{get_column_letter(c)}{r}"
                     raw_value = evaluator.eval_cell(sheet_name, coord)
-                    is_formula = isinstance(cell_val, str) and cell_val.strip().startswith("=")
-                    is_expense = (
-                        role_cfg.normalise_expenses
-                        and (not is_formula)
-                        and (raw_value < 0)
-                    )
-                    norm_value = abs(raw_value) if is_expense else raw_value
+                    is_formula = bool(evaluator.direct_deps.get((sheet_name, coord.upper())))
+                    is_expense = False  # decided after all cells are read (structure-based)
+                    norm_value = raw_value
                     item_id = f"{sheet_name}!{coord}"
                     items[item_id] = PlanItem(
                         id=item_id,
@@ -592,6 +659,41 @@ def read_plan(
                         is_expense=is_expense,
                         is_total=is_formula,
                     )
+
+    # Sign convention: on a sheet that enters expenses as negative numbers, a negative input line
+    # is an expense if a subtotal on that sheet adds it up, or if it is a "davon" sub-line.
+    # Standalone typed lines (e.g. a result typed over its formula) keep their sign, so an
+    # inconsistent sheet is caught by the plausibility checks instead of being "repaired".
+    summed: set[tuple[str, str]] = set()
+    for (dep_sheet, dep_cell), deps in evaluator.direct_deps.items():
+        for d in deps:
+            if d[0] == dep_sheet:
+                summed.add(d)
+    for item_id, item in list(items.items()):
+        role_cfg = layout.roles.get(item.role)
+        if role_cfg is None or not role_cfg.normalise_expenses or item.is_total or item.raw_value >= 0:
+            continue
+        label = item.label.casefold()
+        is_sub_item = any(label.startswith(p.casefold()) for p in role_cfg.sub_item_prefixes)
+        if (item.sheet, item.cell.upper()) in summed or is_sub_item:
+            items[item_id] = item.model_copy(update={"is_expense": True, "value": abs(item.raw_value)})
+
+    # A "davon" sub-line is contained in the nearest non-sub line above it in the same column.
+    by_column: dict[tuple[str, str], list[tuple[int, str]]] = {}
+    for item_id, item in items.items():
+        col, row = coordinate_from_string(item.cell.upper())
+        by_column.setdefault((item.sheet, col), []).append((row, item_id))
+    for rows in by_column.values():
+        parent: str | None = None
+        for _, item_id in sorted(rows):
+            item = items[item_id]
+            role_cfg = layout.roles.get(item.role)
+            prefixes = role_cfg.sub_item_prefixes if role_cfg is not None else []
+            if any(item.label.casefold().startswith(p.casefold()) for p in prefixes):
+                if parent is not None:
+                    items[item_id] = item.model_copy(update={"part_of": parent})
+            else:
+                parent = item_id
 
     known_ids = set(items.keys())
     for item_id, item in list(items.items()):
@@ -607,7 +709,9 @@ def read_plan(
     meta: dict[str, Any] = {
         "file": path.name,
         "plan_year": target_year,
-        "test_date": f"31.12.{target_year}",
+        "available_plan_years": available_years,
+        "flow_roles": [name for name, cfg in layout.roles.items() if cfg.measure == "flow"],
+        "test_date": layout.test_date_template.format(year=target_year),
         "amount_unit": amount_unit,
         "role_sheets": role_to_sheet,
         "role_columns": role_column_meta,

@@ -35,6 +35,13 @@
             "weight": 0.5,
             "ref": null,
             "definition": "50 % der Sonderposten für Investitions- und Baukostenzuschüsse"
+          },
+          {
+            "name": "Eingeforderte, noch nicht eingezahlte Einlagen",
+            "sign": -1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Vom Eigenkapital abzuziehen (§ 1 Abs. 1 Definition „Eigenkapital“)"
           }
         ],
         "source": {
@@ -87,6 +94,13 @@
             "page": 2,
             "section": "§ 1 Abs. 1",
             "quote": "Gesellschafterdarlehen, Rückstellungen und sonstige Fremdkapitalpositionen werden dem Wirtschaftlichen Eigenkapital nicht zugerechnet"
+          },
+          {
+            "page": 1,
+            "section": "§ 1 Abs. 1",
+            "quote": "abzüglich eingeforderter, aber noch nicht eingezahlter Einlagen",
+            "verified": null,
+            "verify_note": null
           }
         ],
         "plan_basis_note": "Eine Unterschreitung laut Vorschau auf Planbasis begründet für sich genommen keinen Kündigungsgrund; die Parteien nehmen Gespräche über Maßnahmen auf (§ 13 Abs. 3)."

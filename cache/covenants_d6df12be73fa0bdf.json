@@ -1,0 +1,243 @@
+{
+  "contract": {
+    "contract_file": "Vertrag_3_Landesbank_Investitionsdarlehen.pdf",
+    "contract_label": "Investitionsdarlehen Nr. LBM-INV-2025-0412",
+    "has_covenants": true,
+    "reason_if_none": null,
+    "reason_source": null,
+    "quantities": [
+      {
+        "name": "EBITDA abzüglich Ertragsteuern",
+        "kind": "other",
+        "components": [
+          {
+            "name": "EBITDA",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": "EBITDA",
+            "definition": "EBITDA des Berechnungszeitraums gemäß Anlage 3 Absatz 2.",
+            "carve_out": false
+          },
+          {
+            "name": "Ertragsteuern",
+            "sign": -1,
+            "weight": 1.0,
+            "ref": "Ertragsteuern",
+            "definition": "Ertragsteuern des Berechnungszeitraums gemäß Anlage 3 Absatz 5.",
+            "carve_out": false
+          }
+        ],
+        "source": {
+          "page": 13,
+          "section": "Anlage 3 Abs. 6 lit. a",
+          "quote": "EBITDA abzüglich Ertragsteuern (Zähler)",
+          "verified": true,
+          "verify_note": null,
+          "original_page": null
+        }
+      },
+      {
+        "name": "EBITDA",
+        "kind": "earnings",
+        "components": [
+          {
+            "name": "Jahresüberschuss bzw. Jahresfehlbetrag",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Jahresüberschuss bzw. Jahresfehlbetrag der Kreditnehmerin gemäß Gewinn- und Verlustrechnung.",
+            "carve_out": false
+          },
+          {
+            "name": "Steuern vom Einkommen und vom Ertrag",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Zuzüglich der Steuern vom Einkommen und vom Ertrag.",
+            "carve_out": false
+          },
+          {
+            "name": "Zinsen und ähnliche Aufwendungen",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Zuzüglich der Zinsen und ähnlichen Aufwendungen.",
+            "carve_out": false
+          },
+          {
+            "name": "Sonstige Zinsen und ähnliche Erträge",
+            "sign": -1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Abzüglich der sonstigen Zinsen und ähnlichen Erträge.",
+            "carve_out": false
+          },
+          {
+            "name": "Abschreibungen auf immaterielle Vermögensgegenstände und Sachanlagen",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Zuzüglich der Abschreibungen auf immaterielle Vermögensgegenstände des Anlagevermögens und Sachanlagen.",
+            "carve_out": false
+          },
+          {
+            "name": "Außerordentliche Aufwendungen bzw. Erträge",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Zuzüglich bzw. abzüglich außerordentlicher Aufwendungen bzw. Erträge, soweit diese im Anhang des Jahresabschlusses gemäß § 285 Nr. 31 HGB gesondert angegeben sind.",
+            "carve_out": false
+          }
+        ],
+        "source": {
+          "page": 13,
+          "section": "Anlage 3 Abs. 2",
+          "quote": "EBITDA bezeichnet für den Berechnungszeitraum den Jahresüberschuss bzw. Jahresfehlbetrag der Kreditnehmerin gemäß Gewinn- und Verlustrechnung",
+          "verified": true,
+          "verify_note": null,
+          "original_page": null
+        }
+      },
+      {
+        "name": "Ertragsteuern",
+        "kind": "taxes",
+        "components": [
+          {
+            "name": "Steuern vom Einkommen und vom Ertrag",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Die in der Gewinn- und Verlustrechnung für den Berechnungszeitraum ausgewiesenen Steuern vom Einkommen und vom Ertrag.",
+            "carve_out": false
+          }
+        ],
+        "source": {
+          "page": 13,
+          "section": "Anlage 3 Abs. 5",
+          "quote": "Ertragsteuern bezeichnet die in der Gewinn- und Verlustrechnung für den Berechnungszeitraum ausgewiesenen Steuern vom Einkommen und vom Ertrag.",
+          "verified": true,
+          "verify_note": null,
+          "original_page": null
+        }
+      },
+      {
+        "name": "Schuldendienst",
+        "kind": "debt_service",
+        "components": [
+          {
+            "name": "Zinsaufwand für Finanzverbindlichkeiten",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Zinsaufwand für Finanzverbindlichkeiten. Zinsaufwendungen aus der Aufzinsung von Rückstellungen (insbesondere Pensionsrückstellungen) sind ausdrücklich nicht einzubeziehen („Zinsaufwendungen aus der Aufzinsung von Rückstellungen (insbesondere Pensionsrückstellungen) sind nicht einzubeziehen“). Finanzverbindlichkeiten umfassen u. a. Darlehen von Gesellschaftern unabhängig von einem Rangrücktritt („Darlehen von Gesellschaftern und sonstigen Dritten, und zwar unabhängig davon, ob für diese Darlehen ein Rangrücktritt vereinbart ist.“), nicht jedoch Rückstellungen.",
+            "carve_out": false
+          },
+          {
+            "name": "Planmäßige Tilgungsleistungen auf Finanzverbindlichkeiten",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Die im Berechnungszeitraum fälligen planmäßigen Tilgungsleistungen auf Finanzverbindlichkeiten. Nicht einzubeziehen sind freiwillige Sondertilgungen, vorzeitige Rückzahlungen sowie Rückzahlungen aus Refinanzierungen und Endfälligkeitsbeträge, soweit sie refinanziert werden („Nicht einzubeziehen sind freiwillige Sondertilgungen, vorzeitige Rückzahlungen sowie Rückzahlungen, die aus einer Refinanzierung geleistet werden, und Endfälligkeitsbeträge (Bullet-Zahlungen), soweit sie refinanziert werden.“).",
+            "carve_out": false
+          }
+        ],
+        "source": {
+          "page": 13,
+          "section": "Anlage 3 Abs. 4",
+          "quote": "Schuldendienst bezeichnet für den Berechnungszeitraum die Summe aus",
+          "verified": true,
+          "verify_note": null,
+          "original_page": null
+        }
+      }
+    ],
+    "covenants": [
+      {
+        "id": "V3-DSCR",
+        "name": "Schuldendienstdeckungsgrad",
+        "numerator": "EBITDA abzüglich Ertragsteuern",
+        "denominator": "Schuldendienst",
+        "operator": ">=",
+        "limit": 1.3,
+        "unit": "ratio",
+        "rounding_decimals": 2,
+        "test_basis": "geschaeftsjahr",
+        "source": {
+          "page": 5,
+          "section": "§ 13 Abs. 1",
+          "quote": "Die Kreditnehmerin verpflichtet sich, für jedes Geschäftsjahr während der Laufzeit dieses Vertrages einen Schuldendienstdeckungsgrad von mindestens 1,30 einzuhalten.",
+          "verified": true,
+          "verify_note": null,
+          "original_page": null
+        },
+        "definition_sources": [
+          {
+            "page": 13,
+            "section": "Anlage 3 Abs. 6",
+            "quote": "Der Schuldendienstdeckungsgrad ist auf zwei Nachkommastellen kaufmännisch zu runden.",
+            "verified": true,
+            "verify_note": null,
+            "original_page": null
+          },
+          {
+            "page": 13,
+            "section": "Anlage 3 Abs. 4 lit. a",
+            "quote": "Zinsaufwendungen aus der Aufzinsung von Rückstellungen (insbesondere Pensionsrückstellungen) sind nicht einzubeziehen",
+            "verified": true,
+            "verify_note": null,
+            "original_page": null
+          },
+          {
+            "page": 13,
+            "section": "Anlage 3 Abs. 4 lit. b",
+            "quote": "Nicht einzubeziehen sind freiwillige Sondertilgungen, vorzeitige Rückzahlungen sowie Rückzahlungen, die aus einer Refinanzierung geleistet werden",
+            "verified": true,
+            "verify_note": null,
+            "original_page": null
+          },
+          {
+            "page": 13,
+            "section": "Anlage 3 Abs. 3",
+            "quote": "Darlehen von Gesellschaftern und sonstigen Dritten, und zwar unabhängig davon, ob für diese Darlehen ein Rangrücktritt vereinbart ist.",
+            "verified": true,
+            "verify_note": null,
+            "original_page": null
+          },
+          {
+            "page": 6,
+            "section": "§ 13 Abs. 4",
+            "quote": "Ein Unterschreiten des Mindestwertes nach Absatz 1 gilt als geheilt, wenn die Kreditnehmerin innerhalb von 30 Tagen nach Vorlage der Kennzahlenbescheinigung Eigenkapital in einer Höhe zuführt",
+            "verified": true,
+            "verify_note": null,
+            "original_page": null
+          }
+        ],
+        "plan_basis_note": "Weist die Planberechnung des Wirtschaftsplans einen Schuldendienstdeckungsgrad von weniger als 1,30 aus, ist dies kein Kündigungsgrund, sondern verpflichtet die Kreditnehmerin nach § 13 Abs. 3, der Bank innerhalb von 30 Tagen Maßnahmen zur Sicherstellung darzulegen. Ein Ist-Bruch kann nach § 13 Abs. 4 innerhalb von 30 Tagen durch Zuführung von Eigenkapital geheilt werden (maximal zweimal während der Laufzeit, nicht in aufeinanderfolgenden Jahren)."
+      }
+    ]
+  },
+  "meta": {
+    "purpose": "extract_covenants:Vertrag_3_Landesbank_Investitionsdarlehen.pdf",
+    "model": "google/gemini-3.8-flash",
+    "prompt_tokens": 13691,
+    "completion_tokens": 7322,
+    "latency_s": 45.194,
+    "attempts": 1,
+    "attempt_log": [
+      {
+        "attempt": 1,
+        "model": "google/gemini-3.8-flash",
+        "status": "ok"
+      }
+    ],
+    "cache_hit": false,
+    "cache_key": "d6df12be73fa0bdfdf19e6561d63347cc6a157b0bbcceaf8ab78367ca2ceb6a8",
+    "cache_file": "C:\\Users\\shiva\\OneDrive\\Desktop\\FINN\\finn-covenant-agent\\cache\\covenants_d6df12be73fa0bdf.json",
+    "prompt_version": "v1",
+    "quotes_total": 10,
+    "quotes_verified": 10,
+    "warnings": [],
+    "normalized": []
+  },
+  "created_at": "2026-11-07T00:04:25.010729+00:00"
+}

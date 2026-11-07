@@ -1,0 +1,357 @@
+{
+  "contract": {
+    "contract_file": "Vertrag_4_Konsortialkredit.pdf",
+    "contract_label": "Konsortialkreditvertrag Stadtwerke Musterstadt GmbH",
+    "has_covenants": true,
+    "reason_if_none": null,
+    "reason_source": null,
+    "quantities": [
+      {
+        "name": "Eigenkapital",
+        "kind": "equity",
+        "components": [
+          {
+            "name": "Bilanzielles Eigenkapital (§ 266 Abs. 3 Buchst. A HGB)",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Bilanzielles Eigenkapital der Kreditnehmerin gemäß § 266 Absatz 3 Buchstabe A HGB laut maßgeblichem Jahresabschluss. Sonderposten (insbesondere für Investitions- und Baukostenzuschüsse), Rückstellungen und Gesellschafterdarlehen sind ausdrücklich nicht Teil des Eigenkapitals, selbst wenn ein Rangrücktritt vereinbart ist.",
+            "carve_out": false
+          }
+        ],
+        "source": {
+          "page": 2,
+          "section": "§ 1 Abs. 1",
+          "quote": "„Eigenkapital“ bezeichnet das bilanzielle Eigenkapital der Kreditnehmerin gemäß § 266",
+          "verified": true,
+          "verify_note": null,
+          "original_page": null
+        }
+      },
+      {
+        "name": "Bilanzsumme",
+        "kind": "total_assets",
+        "components": [
+          {
+            "name": "Summe der Aktiva",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Summe der Aktiva der Kreditnehmerin gemäß dem maßgeblichen Jahresabschluss.",
+            "carve_out": false
+          }
+        ],
+        "source": {
+          "page": 1,
+          "section": "§ 1 Abs. 1",
+          "quote": "„Bilanzsumme“ bezeichnet die Summe der Aktiva der Kreditnehmerin",
+          "verified": true,
+          "verify_note": null,
+          "original_page": null
+        }
+      },
+      {
+        "name": "Nettofinanzverbindlichkeiten",
+        "kind": "debt",
+        "components": [
+          {
+            "name": "Finanzverbindlichkeiten",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": "Finanzverbindlichkeiten",
+            "definition": "Summe der Finanzverbindlichkeiten der Kreditnehmerin zu einem Stichtag.",
+            "carve_out": false
+          },
+          {
+            "name": "Liquide Mittel",
+            "sign": -1,
+            "weight": 1.0,
+            "ref": "Liquide Mittel",
+            "definition": "Abzug der frei verfügbaren Liquiden Mittel der Kreditnehmerin zum Stichtag.",
+            "carve_out": false
+          }
+        ],
+        "source": {
+          "page": 3,
+          "section": "§ 1 Abs. 1",
+          "quote": "Finanzverbindlichkeiten abzüglich der Liquiden Mittel.",
+          "verified": true,
+          "verify_note": null,
+          "original_page": null
+        }
+      },
+      {
+        "name": "Finanzverbindlichkeiten",
+        "kind": "debt",
+        "components": [
+          {
+            "name": "Aufgenommene Darlehen und Kredite",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Sämtliche Verbindlichkeiten der Kreditnehmerin aus aufgenommenen Darlehen und Krediten.",
+            "carve_out": false
+          },
+          {
+            "name": "Anleihen und Schuldscheindarlehen",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Verbindlichkeiten aus Anleihen, Schuldverschreibungen, Schuldscheindarlehen und ähnlichen Instrumenten.",
+            "carve_out": false
+          },
+          {
+            "name": "Finanzierungsleasingverbindlichkeiten",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Verbindlichkeiten aus Finanzierungsleasingverträgen, soweit nach HGB als Verbindlichkeit bilanziert.",
+            "carve_out": false
+          },
+          {
+            "name": "Forderungsverkäufe mit Rückgriff",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Verbindlichkeiten aus Verkäufen von Forderungen mit Rückgriff.",
+            "carve_out": false
+          },
+          {
+            "name": "Sonstige kreditähnliche Geschäfte",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Verbindlichkeiten aus sonstigen Geschäften mit der wirtschaftlichen Wirkung einer Kreditaufnahme.",
+            "carve_out": false
+          },
+          {
+            "name": "Nachrangige Gesellschafterdarlehen",
+            "sign": -1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Ausdrücklich ausgenommen sind Nachrangige Gesellschafterdarlehen, für die ein qualifizierter Rangrücktritt im Sinne von § 39 Abs. 2 InsO gegenüber den Kreditgebern vereinbart ist und deren Bedienung nur aus freiem Vermögen bzw. Bilanzgewinn erfolgen darf.",
+            "carve_out": true
+          }
+        ],
+        "source": {
+          "page": 2,
+          "section": "§ 1 Abs. 1",
+          "quote": "„Finanzverbindlichkeiten“ bezeichnet ohne Doppelzählung sämtliche Verbindlichkeiten der",
+          "verified": true,
+          "verify_note": null,
+          "original_page": null
+        }
+      },
+      {
+        "name": "Liquide Mittel",
+        "kind": "cash",
+        "components": [
+          {
+            "name": "Kassenbestand und Guthaben bei Kreditinstituten",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Kassenbestand und Guthaben der Kreditnehmerin bei Kreditinstituten, soweit diese frei verfügbar und nicht verpfändet oder anderweitig mit Rechten Dritter belastet sind.",
+            "carve_out": false
+          }
+        ],
+        "source": {
+          "page": 2,
+          "section": "§ 1 Abs. 1",
+          "quote": "„Liquide Mittel“ bezeichnet den Kassenbestand und die Guthaben der Kreditnehmerin bei",
+          "verified": true,
+          "verify_note": null,
+          "original_page": null
+        }
+      },
+      {
+        "name": "EBITDA",
+        "kind": "earnings",
+        "components": [
+          {
+            "name": "Jahresüberschuss bzw. Jahresfehlbetrag",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Jahresüberschuss bzw. Jahresfehlbetrag der Kreditnehmerin für den Prüfungszeitraum als Ausgangsbasis.",
+            "carve_out": false
+          },
+          {
+            "name": "Steuern vom Einkommen und vom Ertrag",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Zuzüglich der Steuern vom Einkommen und vom Ertrag, soweit sie bei der Ermittlung des Jahresüberschusses bzw. Jahresfehlbetrages berücksichtigt wurden.",
+            "carve_out": false
+          },
+          {
+            "name": "Zinsen und ähnliche Aufwendungen",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Zuzüglich der Zinsen und ähnlichen Aufwendungen, soweit berücksichtigt. Der Vertrag schweigt zu einer gesonderten Bereinigung nicht zahlungswirksamer Zinsaufwendungen wie der Aufzinsung von Rückstellungen.",
+            "carve_out": false
+          },
+          {
+            "name": "Sonstige Zinsen und ähnliche Erträge",
+            "sign": -1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Abzüglich der sonstigen Zinsen und ähnlichen Erträge, soweit bei der Ermittlung des Jahresüberschusses bzw. Jahresfehlbetrages berücksichtigt.",
+            "carve_out": false
+          },
+          {
+            "name": "Abschreibungen auf immaterielle Vermögensgegenstände und Sachanlagen",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Zuzüglich der Abschreibungen auf immaterielle Vermögensgegenstände und Sachanlagen, soweit berücksichtigt.",
+            "carve_out": false
+          },
+          {
+            "name": "Außerordentliche Aufwendungen (§ 285 Nr. 31 HGB)",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Zuzüglich außerordentlicher Aufwendungen im Sinne von § 285 Nr. 31 HGB, soweit bei der Ermittlung des Jahresüberschusses bzw. Jahresfehlbetrages berücksichtigt.",
+            "carve_out": false
+          },
+          {
+            "name": "Außerordentliche Erträge (§ 285 Nr. 31 HGB)",
+            "sign": -1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Abzüglich außerordentlicher Erträge im Sinne von § 285 Nr. 31 HGB, soweit bei der Ermittlung des Jahresüberschusses bzw. Jahresfehlbetrages berücksichtigt. Erträge aus der Auflösung von Sonderposten werden ausdrücklich nicht bereinigt.",
+            "carve_out": false
+          }
+        ],
+        "source": {
+          "page": 2,
+          "section": "§ 1 Abs. 1",
+          "quote": "„EBITDA“ bezeichnet für einen Prüfungszeitraum den Jahresüberschuss bzw. Jahresfehlbetrag",
+          "verified": true,
+          "verify_note": null,
+          "original_page": null
+        }
+      }
+    ],
+    "covenants": [
+      {
+        "id": "V4-EKQ",
+        "name": "Eigenkapitalquote",
+        "numerator": "Eigenkapital",
+        "denominator": "Bilanzsumme",
+        "operator": ">=",
+        "limit": 30.0,
+        "unit": "percent",
+        "rounding_decimals": 1,
+        "test_basis": "stichtag",
+        "source": {
+          "page": 6,
+          "section": "§ 14 Abs. 1 lit. a",
+          "quote": "die Eigenkapitalquote zu jedem Prüfungsstichtag nicht weniger als 30,0 % beträgt; und",
+          "verified": true,
+          "verify_note": null,
+          "original_page": null
+        },
+        "definition_sources": [
+          {
+            "page": 2,
+            "section": "§ 1 Abs. 1",
+            "quote": "„Eigenkapitalquote“ bezeichnet das Verhältnis des Eigenkapitals zur Bilanzsumme zum",
+            "verified": true,
+            "verify_note": null,
+            "original_page": null
+          },
+          {
+            "page": 7,
+            "section": "§ 14 Abs. 2",
+            "quote": "Die Eigenkapitalquote wird auf eine Nachkommastelle,",
+            "verified": true,
+            "verify_note": null,
+            "original_page": null
+          },
+          {
+            "page": 2,
+            "section": "§ 1 Abs. 1",
+            "quote": "nicht Teil des Eigenkapitals, und zwar auch dann nicht, wenn für ein Gesellschafterdarlehen",
+            "verified": true,
+            "verify_note": null,
+            "original_page": null
+          }
+        ],
+        "plan_basis_note": "Die indikative Berechnung auf Planbasis nach § 13 Absatz 1 lit. c dient gemäß § 14 Absatz 3 lediglich der Frühwarnung; eine Abweichung von den Grenzwerten auf Planbasis begründet keinen Kündigungsgrund, verpflichtet die Kreditnehmerin jedoch zu Gesprächen über Gegenmaßnahmen auf Verlangen der Mehrheitskreditgeber. Gemäß § 14 Absatz 4 ist eine Heilung durch Eigenkapitalzuführung nach dem Prüfungsstichtag ausgeschlossen."
+      },
+      {
+        "id": "V4-DYNVG",
+        "name": "Dynamischer Verschuldungsgrad",
+        "numerator": "Nettofinanzverbindlichkeiten",
+        "denominator": "EBITDA",
+        "operator": "<=",
+        "limit": 3.5,
+        "unit": "ratio",
+        "rounding_decimals": 2,
+        "test_basis": "geschaeftsjahr",
+        "source": {
+          "page": 7,
+          "section": "§ 14 Abs. 1 lit. b",
+          "quote": "b) der Dynamische Verschuldungsgrad für jeden Prüfungszeitraum nicht mehr als 3,50",
+          "verified": true,
+          "verify_note": null,
+          "original_page": null
+        },
+        "definition_sources": [
+          {
+            "page": 2,
+            "section": "§ 1 Abs. 1",
+            "quote": "„Dynamischer Verschuldungsgrad“ bezeichnet für einen Prüfungszeitraum das Verhältnis",
+            "verified": true,
+            "verify_note": null,
+            "original_page": null
+          },
+          {
+            "page": 7,
+            "section": "§ 14 Abs. 2",
+            "quote": "der Dynamische Verschuldungsgrad auf zwei Nachkommastellen kaufmännisch gerundet.",
+            "verified": true,
+            "verify_note": null,
+            "original_page": null
+          },
+          {
+            "page": 2,
+            "section": "§ 1 Abs. 1",
+            "quote": "Erträge aus der Auflösung von Sonderposten werden nicht bereinigt.",
+            "verified": true,
+            "verify_note": null,
+            "original_page": null
+          }
+        ],
+        "plan_basis_note": "Die Planberechnung dient gemäß § 14 Absatz 3 der Frühwarnung; eine Abweichung von den Grenzwerten im Wirtschaftsplan stellt keinen Kündigungsgrund dar, verpflichtet jedoch auf Verlangen der Mehrheitskreditgeber zur Führung von Gesprächen über Gegenmaßnahmen. Eine Heilung nach dem Prüfungsstichtag ist gemäß § 14 Absatz 4 ausgeschlossen."
+      }
+    ]
+  },
+  "meta": {
+    "purpose": "extract_covenants:Vertrag_4_Konsortialkredit.pdf",
+    "model": "google/gemini-3.8-flash",
+    "prompt_tokens": 10935,
+    "completion_tokens": 13336,
+    "latency_s": 77.75,
+    "attempts": 1,
+    "attempt_log": [
+      {
+        "attempt": 1,
+        "model": "google/gemini-3.8-flash",
+        "status": "ok"
+      }
+    ],
+    "cache_hit": false,
+    "cache_key": "7fd9885493eadbd5703aa92b4d90b53de7edb687f31ea40c27806e78ab6ffb08",
+    "cache_file": "C:\\Users\\shiva\\OneDrive\\Desktop\\FINN\\finn-covenant-agent\\cache\\covenants_7fd9885493eadbd5.json",
+    "prompt_version": "v1",
+    "quotes_total": 14,
+    "quotes_verified": 14,
+    "warnings": [],
+    "normalized": []
+  },
+  "created_at": "2026-11-07T00:05:42.901605+00:00"
+}

@@ -285,8 +285,13 @@ def _compute_stress(
         )
         earnings_base = earnings_eval.value
         if earnings_base <= 0:
-            raise CalcError(
-                f"Ausgangswert der Ertragsgröße '{earnings_qty_name}' für den Stresstest muss positiv sein."
+            return 0.0, StressResult(
+                kind="not_applicable",
+                driver_quantity=earnings_qty_name,
+                limit=cov.limit,
+                operator=cov.operator,
+                unit=cov.unit,
+                rounding_decimals=cov.rounding_decimals,
             )
 
         override_key = earnings_qty_name.lower()
@@ -386,6 +391,52 @@ def _compute_stress(
     )
 
 
+def _undefined_result(
+    contract: ContractCovenants,
+    cov: Covenant,
+    num_eval: QuantityEval,
+    den_eval: QuantityEval,
+    met: bool,
+    quantities_by_name: dict[str, Quantity],
+) -> Result:
+    """Result for a ratio whose denominator is not positive: no value, no headroom, no stress test."""
+    used = _dedup_preserve(num_eval.used_quantities + den_eval.used_quantities)
+    sources = _dedup_sources(
+        [cov.source, *cov.definition_sources, *[quantities_by_name[q].source for q in used]]
+    )
+    scale = 100.0 if cov.unit == "percent" else 1.0
+    formula = _build_formula_parts(cov, num_eval, den_eval, scale, 0.0, 0.0)
+    return Result(
+        contract_label=contract.contract_label,
+        contract_file=contract.contract_file,
+        plan_basis_note=cov.plan_basis_note,
+        covenant_id=cov.id,
+        covenant_name=cov.name,
+        numerator_value=num_eval.value,
+        denominator_value=den_eval.value,
+        value_raw=0.0,
+        value_reported=0.0,
+        value_defined=False,
+        limit=cov.limit,
+        operator=cov.operator,
+        unit=cov.unit,
+        headroom=0.0,
+        met=met,
+        stress_value=0.0,
+        stress=StressResult(
+            kind="not_applicable",
+            driver_quantity=cov.denominator,
+            limit=cov.limit,
+            operator=cov.operator,
+            unit=cov.unit,
+            rounding_decimals=cov.rounding_decimals,
+        ),
+        formula=formula,
+        contract_sources=sources,
+        plan_cells=_dedup_preserve(num_eval.plan_cells + den_eval.plan_cells),
+    )
+
+
 def evaluate_contract(
     contract: ContractCovenants,
     mappings: list[TermMapping],
@@ -414,12 +465,20 @@ def evaluate_contract(
             plan,
         )
 
-        if abs(den_eval.value) < 1e-12:
-            raise CalcError(
-                f"Nenner '{cov.denominator}' für Covenant '{cov.id}' ist 0."
-            )
-
         scale = 100.0 if cov.unit == "percent" else 1.0
+        if den_eval.value <= 1e-12:
+            # A ratio over a non-positive denominator (e.g. negative EBITDA) has no meaningful
+            # value. A maximum covenant cannot be met; a minimum covenant is met only if there is
+            # nothing to cover (denominator exactly 0) and the numerator is positive.
+            if cov.operator == "<=":
+                undefined_met = False
+            else:
+                undefined_met = abs(den_eval.value) < 1e-12 and num_eval.value > 0
+            results.append(
+                _undefined_result(contract, cov, num_eval, den_eval, undefined_met, quantities_by_name)
+            )
+            continue
+
         value_raw = (num_eval.value / den_eval.value) * scale
 
         if cov.rounding_decimals is not None:
@@ -461,17 +520,14 @@ def evaluate_contract(
         )
         plan_cells = _dedup_preserve(num_eval.plan_cells + den_eval.plan_cells)
 
+        # Quote remarks are reported once, by the extraction step (see contracts/extract.py).
         cov_warnings: list[str] = []
-        for s in contract_sources:
-            if s.verified is False:
-                note = s.verify_note or "Zitat nicht verifiziert"
-                cov_warnings.append(f"{s.section} (S. {s.page}): {note}")
-            elif s.verify_note and s.verify_note.startswith("Seitenangabe korrigiert"):
-                cov_warnings.append(f"{s.section}: {s.verify_note}")
 
         results.append(
             Result(
                 contract_label=contract.contract_label,
+                contract_file=contract.contract_file,
+                plan_basis_note=cov.plan_basis_note,
                 covenant_id=cov.id,
                 covenant_name=cov.name,
                 numerator_value=num_eval.value,

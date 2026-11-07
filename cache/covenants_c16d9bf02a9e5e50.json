@@ -1,0 +1,195 @@
+{
+  "contract": {
+    "contract_file": "Vertrag_2_Foerderbank_Foerderdarlehen.pdf",
+    "contract_label": "Förderdarlehensvertrag KIE (Stadtwerke Musterstadt GmbH)",
+    "has_covenants": true,
+    "reason_if_none": null,
+    "reason_source": null,
+    "quantities": [
+      {
+        "name": "Bilanzsumme",
+        "kind": "total_assets",
+        "components": [
+          {
+            "name": "Summe der Aktiva",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Die Summe der Aktiva gemäß dem nach § 12 Absatz 1 lit. a) vorzulegenden festgestellten Jahresabschluss der Kreditnehmerin zum jeweiligen Bilanzstichtag (§ 1 Abs. 1).",
+            "carve_out": false
+          }
+        ],
+        "source": {
+          "page": 1,
+          "section": "§ 1 Absatz 1",
+          "quote": "„Bilanzsumme“ bezeichnet die Summe der Aktiva gemäß dem nach § 12 Absatz 1 lit. a) vorzulegenden festgestellten Jahresabschluss der Kreditnehmerin zum jeweiligen Bilanzstichtag.",
+          "verified": true,
+          "verify_note": null,
+          "original_page": null
+        }
+      },
+      {
+        "name": "Eigenkapital",
+        "kind": "equity",
+        "components": [
+          {
+            "name": "Ausgewiesenes Eigenkapital gem. § 266 Abs. 3 Buchstabe A HGB",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Das in der Bilanz der Kreditnehmerin gemäß § 266 Absatz 3 Buchstabe A HGB ausgewiesene Eigenkapital (gezeichnetes Kapital, Kapitalrücklage, Gewinnrücklagen, Gewinn-/Verlustvortrag und Jahresüberschuss/Jahresfehlbetrag bzw. Bilanzgewinn/Bilanzverlust).",
+            "carve_out": false
+          },
+          {
+            "name": "Eingeforderte, aber noch nicht eingezahlte Einlagen",
+            "sign": -1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Ausdrücklich abzuziehen sind eingeforderte, aber noch nicht eingezahlte Einlagen gemäß § 1 Absatz 1.",
+            "carve_out": true
+          }
+        ],
+        "source": {
+          "page": 1,
+          "section": "§ 1 Absatz 1",
+          "quote": "„Eigenkapital“ bezeichnet das in der Bilanz der Kreditnehmerin gemäß § 266 Absatz 3 Buchstabe A HGB ausgewiesene Eigenkapital",
+          "verified": true,
+          "verify_note": null,
+          "original_page": null
+        }
+      },
+      {
+        "name": "Sonderposten",
+        "kind": "other",
+        "components": [
+          {
+            "name": "Sonderposten für Investitions- und Baukostenzuschüsse",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": null,
+            "definition": "Die in der Bilanz der Kreditnehmerin gesondert ausgewiesenen Sonderposten für Investitionszuschüsse und Baukostenzuschüsse (einschließlich Netzanschlusskostenbeiträgen), unabhängig von ihrer Bezeichnung im Einzelfall (§ 1 Abs. 1).",
+            "carve_out": false
+          }
+        ],
+        "source": {
+          "page": 2,
+          "section": "§ 1 Absatz 1",
+          "quote": "„Sonderposten“ bezeichnet die in der Bilanz der Kreditnehmerin gesondert ausgewiesenen Sonderposten für Investitionszuschüsse und Baukostenzuschüsse",
+          "verified": true,
+          "verify_note": null,
+          "original_page": null
+        }
+      },
+      {
+        "name": "Wirtschaftliches Eigenkapital",
+        "kind": "equity",
+        "components": [
+          {
+            "name": "Eigenkapital",
+            "sign": 1,
+            "weight": 1.0,
+            "ref": "Eigenkapital",
+            "definition": "Das nach § 1 Absatz 1 definierte Eigenkapital. Gesellschafterdarlehen, Rückstellungen und sonstige Fremdkapitalpositionen werden dem Wirtschaftlichen Eigenkapital ausdrücklich nicht zugerechnet, auch wenn für sie ein Rangrücktritt vereinbart ist.",
+            "carve_out": false
+          },
+          {
+            "name": "Sonderpostenanteil",
+            "sign": 1,
+            "weight": 0.5,
+            "ref": "Sonderposten",
+            "definition": "Zuzüglich 50 % (fünfzig Prozent) der Sonderposten. Rückstellungen und Gesellschafterdarlehen (auch mit Rangrücktritt) sind ausdrücklich ausgeschlossen.",
+            "carve_out": false
+          }
+        ],
+        "source": {
+          "page": 2,
+          "section": "§ 1 Absatz 1",
+          "quote": "„Wirtschaftliches Eigenkapital“ bezeichnet das Eigenkapital zuzüglich 50 % (fünfzig Prozent) der Sonderposten.",
+          "verified": true,
+          "verify_note": null,
+          "original_page": null
+        }
+      }
+    ],
+    "covenants": [
+      {
+        "id": "V2-WEKQ",
+        "name": "Wirtschaftliche Eigenkapitalquote",
+        "numerator": "Wirtschaftliches Eigenkapital",
+        "denominator": "Bilanzsumme",
+        "operator": ">=",
+        "limit": 27.5,
+        "unit": "percent",
+        "rounding_decimals": null,
+        "test_basis": "stichtag",
+        "source": {
+          "page": 6,
+          "section": "§ 13 Absatz 1",
+          "quote": "Die Kreditnehmerin verpflichtet sich, während der gesamten Laufzeit dieses Vertrages zu jedem Bilanzstichtag eine Wirtschaftliche Eigenkapitalquote von mindestens 27,5 % einzuhalten.",
+          "verified": true,
+          "verify_note": null,
+          "original_page": null
+        },
+        "definition_sources": [
+          {
+            "page": 2,
+            "section": "§ 1 Absatz 1",
+            "quote": "„Wirtschaftliche Eigenkapitalquote“ bezeichnet das Verhältnis des Wirtschaftlichen Eigenkapitals zur Bilanzsumme zum jeweiligen Bilanzstichtag, ausgedrückt in Prozent.",
+            "verified": true,
+            "verify_note": null,
+            "original_page": null
+          },
+          {
+            "page": 2,
+            "section": "§ 1 Absatz 1",
+            "quote": "Gesellschafterdarlehen, Rückstellungen und sonstige Fremdkapitalpositionen werden dem Wirtschaftlichen Eigenkapital nicht zugerechnet, auch wenn für sie ein Rangrücktritt vereinbart ist.",
+            "verified": true,
+            "verify_note": null,
+            "original_page": null
+          },
+          {
+            "page": 6,
+            "section": "§ 13 Absatz 3",
+            "quote": "Eine solche Vorschau begründet für sich genommen keinen Kündigungsgrund.",
+            "verified": true,
+            "verify_note": null,
+            "original_page": null
+          },
+          {
+            "page": 6,
+            "section": "§ 13 Absatz 4",
+            "quote": "Bei einer Unterschreitung der Mindestquote ist die Förderbank berechtigt, (a) eine angemessene Besicherung zu verlangen oder (b) nach Maßgabe von § 15 Absatz 1 lit. d) zu kündigen.",
+            "verified": true,
+            "verify_note": null,
+            "original_page": null
+          }
+        ],
+        "plan_basis_note": "Gemäß § 13 Absatz 3 begründet eine in der Vorschau des Wirtschaftsplans (§ 12 Absatz 1 lit. c) prognostizierte Unterschreitung der Mindestquote für sich genommen keinen Kündigungsgrund, sondern führt zu einer Verpflichtung der Parteien, unverzüglich Gespräche über geeignete Maßnahmen aufzunehmen. Erst eine tatsächliche Unterschreitung zum Bilanzstichtag berechtigt die Bank zur Nachbesicherung bzw. Kündigung, falls innerhalb von 60 Tagen keine Sicherheit gestellt wird (§ 13 Abs. 4 i. V. m. § 15 Abs. 1 lit. d)."
+      }
+    ]
+  },
+  "meta": {
+    "purpose": "extract_covenants:Vertrag_2_Foerderbank_Foerderdarlehen.pdf",
+    "model": "google/gemini-3.8-flash",
+    "prompt_tokens": 14748,
+    "completion_tokens": 9306,
+    "latency_s": 58.856,
+    "attempts": 1,
+    "attempt_log": [
+      {
+        "attempt": 1,
+        "model": "google/gemini-3.8-flash",
+        "status": "ok"
+      }
+    ],
+    "cache_hit": false,
+    "cache_key": "c16d9bf02a9e5e50406c4321308e55059c845bdc3930974ce757a31dd83403ea",
+    "cache_file": "C:\\Users\\shiva\\OneDrive\\Desktop\\FINN\\finn-covenant-agent\\cache\\covenants_c16d9bf02a9e5e50.json",
+    "prompt_version": "v1",
+    "quotes_total": 9,
+    "quotes_verified": 9,
+    "warnings": [],
+    "normalized": []
+  },
+  "created_at": "2026-11-07T00:03:39.667956+00:00"
+}

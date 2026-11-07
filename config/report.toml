@@ -1,0 +1,32 @@
+# Presentation settings for Finn's reply email. No user-facing text here (see src/finn/texts/*.toml).
+
+[report]
+# A covenant that is met but has relative headroom (headroom / limit) below this share is "tight".
+tight_threshold = 0.10
+# Relative headroom at which the headroom bar is full.
+bar_full_at = 0.50
+# Attach the audit JSON of the run to the reply.
+attach_audit = true
+# A subject that already starts with one of these reply prefixes keeps its subject unchanged
+# (no "Re: AW: …"). Compared case-insensitively.
+existing_reply_prefixes = ["re:", "aw:", "antw:", "sv:", "rif:", "réf:"]
+# Maximum width of the HTML mail in pixels.
+max_width_px = 680
+
+[report.colors]
+ok = "#1E7B45"
+tight = "#8A5A00"
+breach = "#B42318"
+text = "#1B2430"
+muted = "#5B6573"
+border = "#DDE1E6"
+bg = "#F5F6F8"
+paper = "#FFFFFF"
+bar_track = "#E6E9EE"
+
+[summary]
+# Maximum number of sentences and characters per sentence the LLM may write.
+max_sentences = 3
+max_sentence_chars = 280
+# Small counts the summary may mention without them appearing in the facts.
+allowed_small_counts_max = 10

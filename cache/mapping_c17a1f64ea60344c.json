@@ -1,0 +1,105 @@
+{
+  "mappings": [
+    {
+      "contract_file": "Vertrag_3_Landesbank_Investitionsdarlehen.pdf",
+      "quantity": "EBITDA",
+      "component": "Jahresüberschuss bzw. Jahresfehlbetrag",
+      "item_ids": [
+        "GuV!D18"
+      ],
+      "rationale": "Entspricht dem Jahresüberschuss laut Gewinn- und Verlustrechnung (Zeile D18)."
+    },
+    {
+      "contract_file": "Vertrag_3_Landesbank_Investitionsdarlehen.pdf",
+      "quantity": "EBITDA",
+      "component": "Steuern vom Einkommen und vom Ertrag",
+      "item_ids": [
+        "GuV!D17"
+      ],
+      "rationale": "Entspricht den Steuern vom Einkommen und vom Ertrag gemäß GuV-Zeile D17."
+    },
+    {
+      "contract_file": "Vertrag_3_Landesbank_Investitionsdarlehen.pdf",
+      "quantity": "EBITDA",
+      "component": "Zinsen und ähnliche Aufwendungen",
+      "item_ids": [
+        "GuV!D13"
+      ],
+      "rationale": "Entspricht den Zinsen und ähnlichen Aufwendungen gemäß GuV-Zeile D13 für die EBITDA-Überleitung."
+    },
+    {
+      "contract_file": "Vertrag_3_Landesbank_Investitionsdarlehen.pdf",
+      "quantity": "EBITDA",
+      "component": "Sonstige Zinsen und ähnliche Erträge",
+      "item_ids": [
+        "GuV!D12"
+      ],
+      "rationale": "Entspricht den sonstigen Zinsen und ähnlichen Erträgen gemäß GuV-Zeile D12."
+    },
+    {
+      "contract_file": "Vertrag_3_Landesbank_Investitionsdarlehen.pdf",
+      "quantity": "EBITDA",
+      "component": "Abschreibungen auf immaterielle Vermögensgegenstände und Sachanlagen",
+      "item_ids": [
+        "GuV!D9"
+      ],
+      "rationale": "Entspricht den planmäßigen Abschreibungen auf immaterielle Vermögensgegenstände und Sachanlagen in GuV-Zeile D9."
+    },
+    {
+      "contract_file": "Vertrag_3_Landesbank_Investitionsdarlehen.pdf",
+      "quantity": "EBITDA",
+      "component": "Außerordentliche Aufwendungen bzw. Erträge",
+      "item_ids": [],
+      "rationale": "Der Wirtschaftsplan weist keine gesonderte Position für außerordentliche Aufwendungen oder Erträge nach § 285 Nr. 31 HGB aus."
+    },
+    {
+      "contract_file": "Vertrag_3_Landesbank_Investitionsdarlehen.pdf",
+      "quantity": "Ertragsteuern",
+      "component": "Steuern vom Einkommen und vom Ertrag",
+      "item_ids": [
+        "GuV!D17"
+      ],
+      "rationale": "Entspricht den in der GuV für den Berechnungszeitraum ausgewiesenen Steuern vom Einkommen und vom Ertrag."
+    },
+    {
+      "contract_file": "Vertrag_3_Landesbank_Investitionsdarlehen.pdf",
+      "quantity": "Schuldendienst",
+      "component": "Zinsaufwand für Finanzverbindlichkeiten",
+      "item_ids": [
+        "Finanzierung!G15"
+      ],
+      "rationale": "Umfasst den Zinsaufwand sämtlicher Finanzverbindlichkeiten inklusive Gesellschafterdarlehen aus dem Darlehensspiegel und schließt die Aufzinsung von Rückstellungen vertragskonform aus."
+    },
+    {
+      "contract_file": "Vertrag_3_Landesbank_Investitionsdarlehen.pdf",
+      "quantity": "Schuldendienst",
+      "component": "Planmäßige Tilgungsleistungen auf Finanzverbindlichkeiten",
+      "item_ids": [
+        "Finanzierung!D15"
+      ],
+      "rationale": "Weist die Summe der planmäßigen Tilgungen aller Finanzverbindlichkeiten aus und schließt freiwillige Sondertilgungen definitionsgemäß aus."
+    }
+  ],
+  "meta": {
+    "purpose": "map_terms:Vertrag_3_Landesbank_Investitionsdarlehen.pdf",
+    "model": "google/gemini-3.8-flash",
+    "prompt_tokens": 5371,
+    "completion_tokens": 5377,
+    "latency_s": 37.049,
+    "attempts": 1,
+    "cache_hit": false,
+    "cache_key": "c17a1f64ea60344cd34882ab67fd4a9a9f68cb08bed5441bef6f6afa4009acb7",
+    "cache_file": "C:\\Users\\shiva\\OneDrive\\Desktop\\FINN\\finn-covenant-agent\\cache\\mapping_c17a1f64ea60344c.json",
+    "warnings": [
+      {
+        "key": "empty_plan_line",
+        "params": {
+          "component": "Außerordentliche Aufwendungen bzw. Erträge",
+          "quantity": "EBITDA",
+          "rationale": "Der Wirtschaftsplan weist keine gesonderte Position für außerordentliche Aufwendungen oder Erträge nach § 285 Nr. 31 HGB aus."
+        }
+      }
+    ]
+  },
+  "created_at": "2026-11-07T00:06:29.629521+00:00"
+}

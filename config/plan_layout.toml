@@ -1,13 +1,18 @@
 amount_unit = "T€"
-cover_unit_pattern = 'Alle Beträge in\s+([^\s(]+)'
+# Test date of the plan year (fiscal year end). {year} is replaced by the plan year.
+test_date_template = "31.12.{year}"
+
+# Fallback if amount_unit is empty: a cover-sheet line containing one of the markers,
+# followed by one of the unit candidates (longest candidate wins).
+cover_unit_markers = ["beträge in", "amounts in"]
+unit_candidates = ["Mio. €", "T€", "TEUR", "EUR", "€"]
 
 [plan_column]
-patterns = [
-    'plan\s*{year}',
-    '{year}\s*\(plan\)',
-]
+# A header is the plan column if it contains a 4-digit year AND a word starting with one of these.
+keywords = ["plan"]
 
 [roles.income_statement]
+measure = "flow"
 sheet_aliases = ["GuV", "Erfolgsplan", "Gewinn- und Verlustrechnung"]
 content_keywords = [
     "jahresüberschuss",
@@ -17,9 +22,14 @@ content_keywords = [
     "betriebsergebnis",
 ]
 column_mode = "plan_year"
+# Expenses are entered as negative numbers on this sheet. A negative input line that a subtotal
+# adds up (or a "davon" sub-line of one) is an expense and is read as a positive amount.
+# Standalone lines and subtotals keep their sign.
 normalise_expenses = true
+sub_item_prefixes = ["davon", "thereof", "of which"]
 
 [roles.balance_sheet]
+measure = "stock"
 sheet_aliases = ["Bilanz", "Planbilanz", "Vermögensplan"]
 content_keywords = [
     "summe aktiva",
@@ -32,6 +42,8 @@ column_mode = "plan_year"
 normalise_expenses = false
 
 [roles.loan_schedule]
+# Mixed sheet (balances and the year's payments); not used for the flow/stock check.
+measure = "stock"
 sheet_aliases = ["Finanzierung", "Darlehensspiegel", "Finanzierungsplan"]
 content_keywords = [
     "darlehen",
@@ -48,6 +60,7 @@ description = "Summe Aktiva = Summe Passiva"
 lhs = [{ role = "balance_sheet", label_all = ["summe aktiva"] }]
 rhs = [{ role = "balance_sheet", label_all = ["summe passiva"] }]
 tolerance = 0.5
+blocking = true
 
 [[checks]]
 id = "abgleich_kreditinstitute"
@@ -55,6 +68,7 @@ description = "Summe Kreditinstitute (Darlehensspiegel) = Verbindlichkeiten gege
 lhs = [{ role = "loan_schedule", label_all = ["summe kreditinstitute"], column_all = ["stand", "31.12.{year}"] }]
 rhs = [{ role = "balance_sheet", label_all = ["verbindlichkeiten gegenüber kreditinstituten"] }]
 tolerance = 0.5
+blocking = true
 
 [[checks]]
 id = "abgleich_zinsaufwand"
@@ -65,6 +79,7 @@ lhs = [
 ]
 rhs = [{ role = "loan_schedule", label_all = ["summe darlehen gesamt"], column_all = ["zinsaufwand"] }]
 tolerance = 0.5
+blocking = true
 
 [[checks]]
 id = "ebitda_identitaet"
@@ -81,3 +96,4 @@ rhs = [
     { role = "income_statement", label_all = ["abschreibungen"], sign = 1 },
 ]
 tolerance = 0.5
+blocking = true

@@ -13,9 +13,9 @@ from finn.config import PROJECT_ROOT
 
 
 class PlanColumnConfig(BaseModel):
-    """Regex patterns for locating plan-year column headers."""
+    """Words that mark a column header as the plan column (next to a 4-digit year in the same header)."""
 
-    patterns: list[str] = Field(default_factory=list)
+    keywords: list[str] = Field(default_factory=list)
 
 
 class RoleConfig(BaseModel):
@@ -25,6 +25,10 @@ class RoleConfig(BaseModel):
     content_keywords: list[str] = Field(default_factory=list)
     column_mode: Literal["plan_year", "all_numeric"]
     normalise_expenses: bool = False
+    # "flow" = amounts over the period (income statement, payments); "stock" = balances at a date.
+    measure: Literal["flow", "stock"] = "stock"
+    # Labels of sub-item lines ("davon …") that carry the sign convention of the line above.
+    sub_item_prefixes: list[str] = Field(default_factory=list)
 
 
 class CheckTermConfig(BaseModel):
@@ -45,13 +49,19 @@ class CheckConfig(BaseModel):
     lhs: list[CheckTermConfig]
     rhs: list[CheckTermConfig]
     tolerance: float = 0.5
+    # A failed blocking check stops the covenant calculation: Finn replies that the plan is
+    # inconsistent instead of reporting numbers it cannot certify. Skipped checks never block.
+    blocking: bool = True
 
 
 class PlanLayoutConfig(BaseModel):
     """Complete workbook layout and plausibility check configuration."""
 
     amount_unit: str = ""
-    cover_unit_pattern: str | None = None
+    # Test date of the plan year (fiscal year end); {year} is replaced by the plan year.
+    test_date_template: str  # required in the layout config, e.g. "31.12.{year}"
+    cover_unit_markers: list[str] = Field(default_factory=list)
+    unit_candidates: list[str] = Field(default_factory=list)
     plan_column: PlanColumnConfig = Field(default_factory=PlanColumnConfig)
     roles: dict[str, RoleConfig] = Field(default_factory=dict)
     checks: list[CheckConfig] = Field(default_factory=list)

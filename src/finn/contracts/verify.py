@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import unicodedata
 
 from finn.contracts.pdf_text import PageText
@@ -26,15 +25,13 @@ _QUOTE_TRANSLATION = str.maketrans(
         "\u00ad": None,
     }
 )
-_WHITESPACE_RE = re.compile(r"\s+")
-_HYPHENATION_NOTE = "Abgleich ohne Satzzeichen/Trennstriche"
 
 
 def normalize(s: str) -> str:
     """Normalize text for quote matching: NFKC, unify quotes/dashes, remove soft hyphens, collapse spaces, casefold."""
     nfkc = unicodedata.normalize("NFKC", s)
     translated = nfkc.translate(_QUOTE_TRANSLATION)
-    collapsed = _WHITESPACE_RE.sub(" ", translated).strip()
+    collapsed = " ".join(translated.split())
     return collapsed.casefold()
 
 
@@ -50,7 +47,7 @@ def verify_source(source: Source, pages: list[PageText]) -> Source:
         return source.model_copy(
             update={
                 "verified": False,
-                "verify_note": "Zitat zu kurz für eine Prüfung",
+                "verify_note": "quote_too_short",
             }
         )
 
@@ -66,7 +63,7 @@ def verify_source(source: Source, pages: list[PageText]) -> Source:
             return source.model_copy(update={"verified": True, "verify_note": None})
         if alnum_quote and alnum_quote in alnum_map[source.page]:
             return source.model_copy(
-                update={"verified": True, "verify_note": _HYPHENATION_NOTE}
+                update={"verified": True, "verify_note": "quote_loose_match"}
             )
 
     # c) Check cited page + next page joined (normal, then alnum-only)
@@ -78,7 +75,7 @@ def verify_source(source: Source, pages: list[PageText]) -> Source:
             alnum_map[source.page] + alnum_map[source.page + 1]
         ):
             return source.model_copy(
-                update={"verified": True, "verify_note": _HYPHENATION_NOTE}
+                update={"verified": True, "verify_note": "quote_loose_match"}
             )
 
     # b) Check all other single pages (normal first, then alnum-only)
@@ -93,7 +90,7 @@ def verify_source(source: Source, pages: list[PageText]) -> Source:
             update={
                 "page": found_page,
                 "verified": True,
-                "verify_note": f"Seitenangabe korrigiert: S. {found_page} statt S. {source.page}",
+                "verify_note": "quote_page_corrected", "original_page": source.page,
             }
         )
 
@@ -109,7 +106,7 @@ def verify_source(source: Source, pages: list[PageText]) -> Source:
                 update={
                     "page": found_page,
                     "verified": True,
-                    "verify_note": f"Seitenangabe korrigiert: S. {found_page} statt S. {source.page} ({_HYPHENATION_NOTE})",
+                    "verify_note": "quote_page_corrected", "original_page": source.page,
                 }
             )
 
@@ -128,7 +125,7 @@ def verify_source(source: Source, pages: list[PageText]) -> Source:
                 update={
                     "page": found_page,
                     "verified": True,
-                    "verify_note": f"Seitenangabe korrigiert: S. {found_page} statt S. {source.page}",
+                    "verify_note": "quote_page_corrected", "original_page": source.page,
                 }
             )
         if len(other_pair_matches) == 0 and alnum_quote:
@@ -145,7 +142,7 @@ def verify_source(source: Source, pages: list[PageText]) -> Source:
                     update={
                         "page": found_page,
                         "verified": True,
-                        "verify_note": f"Seitenangabe korrigiert: S. {found_page} statt S. {source.page} ({_HYPHENATION_NOTE})",
+                        "verify_note": "quote_page_corrected", "original_page": source.page,
                     }
                 )
 
@@ -153,7 +150,7 @@ def verify_source(source: Source, pages: list[PageText]) -> Source:
     return source.model_copy(
         update={
             "verified": False,
-            "verify_note": "Zitat im Vertrag nicht gefunden",
+            "verify_note": "quote_not_found",
         }
     )
 

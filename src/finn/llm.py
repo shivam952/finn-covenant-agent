@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 import time
 from typing import Any, Callable, Protocol, TypeVar, runtime_checkable
 
@@ -15,8 +14,15 @@ from finn.models import build_llm_json_schema
 
 T = TypeVar("T", bound=BaseModel)
 
-_FENCE_RE = re.compile(r"^```(?:json)?\s*(.*?)\s*```$", re.DOTALL | re.IGNORECASE)
 _NON_RETRYABLE_STATUS_CODES = frozenset({400, 401, 402, 403, 404})
+_NO_ENDPOINT_FOR_PARAMS_MARKER = "no endpoints found that can handle the requested parameters"
+
+
+def _is_provider_params_rejection(exc: Exception) -> bool:
+    """True if the gateway rejected the request because no endpoint honours the provider parameters."""
+    return getattr(exc, "status_code", None) == 404 and (
+        _NO_ENDPOINT_FOR_PARAMS_MARKER in str(exc).lower()
+    )
 
 
 class LLMError(Exception):
@@ -41,12 +47,17 @@ class JsonLLM(Protocol):
 
 
 def strip_markdown_fences(text: str) -> str:
-    """Strip leading/trailing ```json ... ``` markdown code fences if present."""
+    """Strip a leading ``` / ```json line and a trailing ``` if the whole answer is fenced."""
     stripped = text.strip()
-    m = _FENCE_RE.match(stripped)
-    if m:
-        return m.group(1).strip()
-    return stripped
+    if not (stripped.startswith("```") and stripped.endswith("```") and len(stripped) >= 6):
+        return stripped
+    inner = stripped[3:-3]
+    first_line, sep, rest = inner.partition("\n")
+    if sep and first_line.strip().casefold() in ("", "json"):
+        inner = rest
+    elif not sep and inner.casefold().startswith("json"):
+        inner = inner[4:]
+    return inner.strip()
 
 
 TransportReturn = tuple[str, int, int] | tuple[str, int, int, str | None]
@@ -79,6 +90,7 @@ class LLMClient:
             if isinstance(parsed_params, dict) and parsed_params:
                 self.provider_params = parsed_params
 
+        self.current_provider_params: dict[str, Any] | None = self.provider_params
         self._transport = transport
         self._clock_fn = clock_fn
         self._sleep_fn = sleep_fn
@@ -124,8 +136,8 @@ class LLMClient:
             },
             "timeout": 60.0,
         }
-        if self.provider_params is not None:
-            kwargs["extra_body"] = {"provider": self.provider_params}
+        if self.current_provider_params is not None:
+            kwargs["extra_body"] = {"provider": self.current_provider_params}
 
         response = self._client.chat.completions.create(**kwargs)
         choice = response.choices[0]
@@ -165,11 +177,14 @@ class LLMClient:
         last_error: str = "Unknown error"
 
         for model in models_to_try:
+            self.current_provider_params = self.provider_params
+            params_relaxed = False
             messages: list[dict[str, str]] = [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ]
-            for attempt_idx in range(2):
+            attempt_idx = 0
+            while attempt_idx < 2:
                 self._check_budget(t0, purpose, total_attempts)
                 total_attempts += 1
                 raw_content = ""
@@ -242,12 +257,25 @@ class LLMClient:
                             "error": last_error,
                         }
                     )
+                    if (
+                        not params_relaxed
+                        and self.current_provider_params is not None
+                        and _is_provider_params_rejection(net_exc)
+                    ):
+                        # No endpoint honours the provider parameters for this model:
+                        # retry the same model once without them. Pydantic validation
+                        # still guards the output.
+                        params_relaxed = True
+                        self.current_provider_params = None
+                        attempt_log[-1]["action"] = "require_parameters disabled"
+                        continue
                     if status_code in _NON_RETRYABLE_STATUS_CODES:
                         # Do not retry on the same model for 400/401/402/403/404
                         break
                     if attempt_idx == 0:
                         self._check_budget(t0, purpose, total_attempts)
                         self._sleep_fn(2.0)
+                attempt_idx += 1
 
         raise LLMError(
             f"LLM structured completion failed for '{purpose}' after {total_attempts} attempts: {last_error}"
