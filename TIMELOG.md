@@ -27,4 +27,6 @@ re-run independently before the next one started. The commit history shows the s
 | 07.11. | 8d Reply polish | Claude directly | 0.25 h | Grouped "no plan line" notes, no contradictory carve-out note, no doubled quotation marks, CRLF-safe cache keys, test that the committed cache needs no LLM |
 | 07.11. | 9 Live mail test | Shivam + coding assistant + Claude | 0.75 h | Gmail account and app password; order sent from a second account; reply in the same thread with audit attached; exactly-once confirmed; missing-attachment reply; first order landed in spam (filter added to README) |
 | 07.11. | 9b Thank-you mails | Claude directly | 0.25 h | "Danke!" is recorded but not answered (configurable) |
-| | **Total so far** | | **11 h** | |
+| 07.11. | 10 GitHub | coding assistant | 0.1 h | Secret scan, pushed; repository later made public |
+| 07.11. | 10b Docs | Claude directly | 0.5 h | README rewritten as a self-contained guide with a reply screenshot; docs/HANDOFF.md as the full project handbook; models preset in `.env.example` so a fresh clone hits the committed cache |
+| | **Total** | | **11.5 h** | More than the 4–6 h guideline; the extra time went into robustness, as the brief suggests |

@@ -1003,7 +1003,7 @@ Step 10 of Finn: publish the repository privately on GitHub. Do not edit any fil
 
 1. Run `gh --version` and `gh auth status`. If gh is missing or not logged in, STOP and tell me (I will run `gh auth login` myself).
 2. Final checks before anything leaves this machine:
-   - `pytest -q` (expected: 112 passed) and `git status --short` (expected: empty).
+   - NOTE.md and docs/PROMPTS.md were just updated outside this editor: `git add -A` and commit them with the message "Docs: NOTE and prompt log after the live tests". Then `pytest -q` (expected: 112 passed) and `git status --short` (expected: empty).
    - `git ls-files` must NOT contain .env or anything under runs/ except runs/.gitkeep. Report found/not found.
    - Search all tracked files for "sk-or-v1" and for the values of MAIL_APP_PASSWORD and OPENROUTER_API_KEY from .env, without printing them. Report found/not found for each. If anything is found, STOP.
 3. Create the private repository and push: `gh repo create finn-covenant-agent --private --source . --remote origin --push`. Show the output and the repository URL.
@@ -1011,6 +1011,30 @@ Step 10 of Finn: publish the repository privately on GitHub. Do not edit any fil
    REVIEWERS: <fill in>
 5. Show `git log --oneline -3`, `git remote -v` and `gh repo view --json name,visibility,url`.
 End with a table "step | result | notes".
+```
+
+**Review notes:** Pushed privately to `shivam952/finn-covenant-agent` (commit `f7a3748`); 112 passed before the push. `.env` and run files are not tracked, and no real key or password is in any tracked file (the only "sk-or-v1" strings are the dummy key in a leak test and this prompt). Reviewer invitations are still open until their GitHub usernames are known.
+
+---
+
+## Step 10b – README and handoff document (built directly by the assistant)
+
+Not a prompt: written directly in the assistant's workspace, then copied into the repository.
+
+- README rewritten as a self-contained guide: result table, reply screenshot, 5-minute quick start, Gmail setup, commands, architecture, guards, configuration, layout, troubleshooting.
+- `docs/HANDOFF.md`: the complete handbook (domain primer, every contract with its traps, architecture, each pipeline step, data model, mail agent, configuration, LLM and cache, tests, build history and live-run findings, demo, extension, limitations, glossary).
+- `.env.example` presets `LLM_MODEL=google/gemini-3.8-flash` and the fallback, so a fresh clone uses the committed cache (only the API key has to be set).
+
+## Prompt 11 – Commit and push the docs
+
+```text
+Step 11 of Finn. Files on disk were updated outside this editor (README.md, docs/HANDOFF.md, docs/images/reply.jpg, .env.example, TIMELOG.md, docs/PROMPTS.md).
+Rules: close all open editor tabs WITHOUT saving first. Do not edit any file. Do not run git checkout, git restore, git stash or git reset. Never print .env or any key. Copy all output verbatim; if something fails, STOP and report it.
+
+1. Run `pytest -q`. Expected: 112 passed.
+2. `git add -A`, show `git status --short` (.env and runs/ must not appear). Search the staged diff for "sk-or-v1-" followed by anything other than "TOP-SECRET", and for the MAIL_APP_PASSWORD value; report found/not found only. If found, STOP.
+3. Commit with the message "Docs: self-contained README with screenshot, project handbook (docs/HANDOFF.md), preset models" and `git push`.
+4. Show `git log --oneline -3` and `gh repo view --json url,visibility`.
 ```
 
 **Review notes:** _(filled in after review)_
