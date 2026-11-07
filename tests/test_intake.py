@@ -119,6 +119,19 @@ def test_unrelated_mail(tmp_path: Path) -> None:
     assert h.decision.kind == "unrelated" and "Covenant-Prüfungen" in h.reply.text
 
 
+def test_plain_thank_you_is_recorded_but_not_answered(tmp_path: Path) -> None:
+    h = handle_email(parse_eml_file(SAMPLES / "unrelated.eml"), _settings(tmp_path),
+                     GoldenFakeLLM(intent=OrderIntent(intent="acknowledgement")))
+    assert h.decision.kind == "no_reply" and h.ignored_reason and h.message is None
+    assert h.audit_path is not None and h.audit_path.exists()
+
+
+def test_thank_you_with_a_plan_attached_is_still_checked(tmp_path: Path) -> None:
+    h = handle_email(parse_eml_file(SAMPLES / "order.eml"), _settings(tmp_path),
+                     GoldenFakeLLM(intent=OrderIntent(intent="acknowledgement")))
+    assert h.decision.kind == "run" and h.outcome is not None
+
+
 def test_broken_excel_gets_plan_format_reply(tmp_path: Path) -> None:
     parsed = parse_eml_file(SAMPLES / "order.eml")
     parsed.attachments[0].payload = b"this is not an excel file"

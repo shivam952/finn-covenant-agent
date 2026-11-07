@@ -34,7 +34,7 @@ def load_agent_config(path: str | None = None) -> dict[str, Any]:
 class OrderIntent(BaseModel):
     """What the sender wants, as stated in the email (filled by the LLM, validated by Pydantic)."""
 
-    intent: Literal["covenant_check", "other", "unclear"]
+    intent: Literal["covenant_check", "acknowledgement", "other", "unclear"]
     plan_year: int | None = None
     test_date: str | None = None
     focus_contracts: list[str] = Field(default_factory=list)
@@ -102,6 +102,7 @@ class Decision:
         "wrong_attachment",
         "unrelated",
         "needs_clarification",
+        "no_reply",
     ]
     params: dict[str, Any] = field(default_factory=dict)
     questions: list[str] = field(default_factory=list)
@@ -109,6 +110,9 @@ class Decision:
 
 def decide(parsed: ParsedEmail, intent: OrderIntent) -> Decision:
     """Fixed rules over structured data only; no keyword matching on free text."""
+    if intent.intent == "acknowledgement" and not xlsx_attachments(parsed):
+        answer = bool(load_agent_config()["intake"].get("answer_acknowledgements", False))
+        return Decision("unrelated") if answer else Decision("no_reply")
     if intent.intent == "other":
         return Decision("unrelated")
     if xlsx_attachments(parsed):

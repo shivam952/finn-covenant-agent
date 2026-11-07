@@ -939,4 +939,57 @@ Rules: close all open editor tabs WITHOUT saving first. Do not edit any file. Do
 3. `git add -A`, show `git status --short` (.env and runs/*.json must not appear), commit with the message "Step 8d: reply notes grouped, carve-out note deduplicated, quote marks, CRLF-safe cache keys", and show `git log --oneline -3`.
 ```
 
+**Review notes:** 110 passed; the cached run still gives ✓ for all 4 covenants, and the notes now read cleanly (one carve-out note, one grouped "no plan line" line). Committed as `a26de17`. Offline verification is complete.
+
+---
+
+## Prompt 9 – Live mail test with Gmail
+
+Before pasting (done by hand, never by the assistant): a test Gmail account for Finn with 2-step verification, an app password, and IMAP turned on; then in `finn-covenant-agent/.env` set `MAIL_USER` (Finn's Gmail address), `MAIL_APP_PASSWORD` (the 16-character app password) and `FINN_MAIL_ADDRESS` (the same address). Then send the order email from a second account: attach `data/samples/Wirtschaftsplan_2027.xlsx` and write a short German request ("Bitte prüfe die Covenants für den Wirtschaftsplan 2027.").
+
+```text
+Step 9 of Finn: live mail test. Do not edit any file except where stated. Do not run git checkout, git restore, git stash or git reset. Never print .env, any key or password. Copy all output verbatim; if something fails, STOP and report it.
+
+1. Show only the NAMES of the variables set in finn-covenant-agent/.env. MAIL_USER, MAIL_APP_PASSWORD and FINN_MAIL_ADDRESS must be among them; if not, STOP.
+
+2. Run `finn watch --once`. It should find the order email that was just sent to Finn's address, answer it once and exit. Show the complete console output. (If it reports an IMAP or SMTP login error, STOP and show the error without any password.)
+
+3. From the newest audit file in runs/, show: email.from, email.subject, decision, the reply subject, the reply recipients (To and Cc), whether the reply has In-Reply-To and References headers, the attachment names of the reply, and reply.summary.source. Also show the number of entries in runs/processed.json.
+
+4. Run `finn watch --once` a second time. Expected: no new reply (the order is already in runs/processed.json). Show the output.
+
+5. Now I will send two more emails to Finn from the second account: one without an attachment, and one that replies "Danke!" in the same thread. Wait until I say "sent", then run `finn watch --once` and show the output. Expected: a polite "please attach the plan" reply to the first; the second is either answered as unrelated or ignored, but never answered with another full check.
+
+6. Do not commit anything in this step (runs/ is git-ignored). End with a table "step | result | notes".
+```
+
+**Review notes:**
+- Setting up the Gmail account took a few rounds: placeholder values were copied from the instructions, and the app-password page only appears once 2-step verification is on.
+- The order email was sent by the assistant from Shivam's Gmail through the browser, with the plan attached; so were the two follow-up mails.
+- **The first order landed in Finn's spam folder** (new account). The IDE moved it to the inbox over IMAP; after that everything worked. Fix for the demo: a Gmail filter "To: Finn → never spam" (now in the README).
+- Step 2: answered once, in the same thread (`In-Reply-To` and `References` set), audit JSON attached, summary written by the LLM. The reply arrived in Shivam's inbox, not in spam. Step 4: a second poll sent nothing. Step 5: "no attachment" got the right reply. The other four of the five entries in `processed.json` are most likely Google's welcome and security mails, which loop protection ignored.
+- **"Danke!" in the thread got the "I only do covenant checks" reply.** It's correct but awkward in a live demo. Fixed in step 9b.
+
+---
+
+## Step 9b – Thank-you mails (built directly by the assistant)
+
+Not a prompt: written and tested directly in the assistant's workspace, then copied into the repository.
+
+- New intake intent `acknowledgement` (only thanks or confirms, asks for nothing). Code decides `no_reply`: the mail is recorded in the audit and the processed store, and not answered. If a plan is attached, it is still checked. `config/agent.toml` → `answer_acknowledgements = true` restores the short reply.
+- README: the Gmail spam filter as setup step 4. 112 tests pass.
+
+---
+
+## Prompt 9c – Pick up step 9b, re-test the thank-you, commit
+
+```text
+Step 9c of Finn. Files on disk were updated outside this editor.
+Rules: close all open editor tabs WITHOUT saving first. Do not edit any file. Do not run git checkout, git restore, git stash or git reset. Never print .env, any key or password. Copy all output verbatim; if something fails, STOP and report it.
+
+1. Run `pytest -q`. Expected: 112 passed.
+2. Wait until I say "sent" (one more "Danke!" reply in the thread will be sent to Finn), then run `finn watch --once` and show the output. Expected: a log line "ignored ... (acknowledgement without a request)" and no "replied to" line.
+3. `git add -A`, show `git status --short` (.env and runs/ must not appear), commit with the message "Step 9b: thank-you mails are recorded, not answered; Gmail spam filter in README", and show `git log --oneline -3`.
+```
+
 **Review notes:** _(filled in after review)_

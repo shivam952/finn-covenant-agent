@@ -25,4 +25,6 @@ re-run independently before the next one started. The commit history shows the s
 | 07.11. | 8b Hardening after the live run | Claude directly | 0.5 h | Ratio structure check with corrective re-read; unused quantities and weight-0 lines dropped; carve-outs subtracted only from cells that contain them; duplicate notices removed |
 | 07.11. | 8c Live re-run | coding assistant + Shivam | 0.25 h | Measured model as primary: all 4 covenants match the answer key, 34/34 quotes verified, cached run 0.1 s; committed |
 | 07.11. | 8d Reply polish | Claude directly | 0.25 h | Grouped "no plan line" notes, no contradictory carve-out note, no doubled quotation marks, CRLF-safe cache keys, test that the committed cache needs no LLM |
-| | **Total so far** | | **10 h** | Gmail and `finn watch` still to do |
+| 07.11. | 9 Live mail test | Shivam + coding assistant + Claude | 0.75 h | Gmail account and app password; order sent from a second account; reply in the same thread with audit attached; exactly-once confirmed; missing-attachment reply; first order landed in spam (filter added to README) |
+| 07.11. | 9b Thank-you mails | Claude directly | 0.25 h | "Danke!" is recorded but not answered (configurable) |
+| | **Total so far** | | **11 h** | |

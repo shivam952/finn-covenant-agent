@@ -31,7 +31,7 @@ Fill in `.env`:
 Then:
 
 ```bash
-pytest                                                          # 110 tests, no network needed
+pytest                                                          # 112 tests, no network needed
 finn run --eml data/samples/order.eml --compare-expected --preview   # offline run, opens the reply
 finn watch                                                      # live: answer emails to Finn's inbox
 ```
@@ -93,6 +93,7 @@ email ─▶ loop protection (code) ─▶ intake (LLM → OrderIntent) ─▶ d
 
 - **Every email gets an answer, normally exactly one.** Missing or wrong attachment, unreadable or
   inconsistent Excel, unrelated email, unclear request and internal errors each get a short reply.
+  A plain "thank you" in the thread is recorded but not answered (`config/agent.toml`).
   Message-IDs are stored in `runs/processed.json`, which survives restarts. Finn does not rely on
   the unread flag, so an order someone already opened in the inbox is still answered. (A crash in
   the moment between sending and recording could cause one duplicate.)
@@ -116,7 +117,9 @@ email ─▶ loop protection (code) ─▶ intake (LLM → OrderIntent) ─▶ d
 1. Create a test Gmail account and turn on 2-step verification.
 2. Create an app password (Google account → Security → App passwords). Put it in `MAIL_APP_PASSWORD`.
 3. Gmail settings → Forwarding and POP/IMAP → turn on IMAP.
-4. Run `finn watch` and send an order from another address. The reply arrives in the same thread
+4. In Finn's Gmail, create a filter (To: Finn's address → "Never send it to Spam"). A new account
+   otherwise tends to file the first orders as spam, where Finn does not look.
+5. Run `finn watch` and send an order from another address. The reply arrives in the same thread
    within about a minute.
 
 No keys or passwords are in the repository; `.env` is git-ignored.

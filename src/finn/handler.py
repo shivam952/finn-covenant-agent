@@ -136,6 +136,12 @@ def handle_email(
             run_id=run_id,
         )
 
+        if decision.kind == "no_reply":
+            # A plain thank-you or confirmation: recorded, not answered (configurable in agent.toml).
+            h.ignored_reason = "acknowledgement without a request"
+            audit["reply"] = None
+            h.audit_path = write_audit(audit, settings.runs_dir)
+            return h
         if decision.kind != "run":
             h.reply = build_simple_reply(decision.kind, ctx, decision.params, decision.questions)
         else:

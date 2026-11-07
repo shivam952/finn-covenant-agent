@@ -3,6 +3,9 @@
 [intake]
 # Only the first characters of the body go to the LLM (quoted history is usually below).
 max_body_chars = 6000
+# A mail that only thanks Finn or confirms receipt is recorded but not answered (false), or gets
+# the short "I only do covenant checks" reply (true).
+answer_acknowledgements = false
 
 [watch]
 # File in RUNS_DIR with the Message-IDs already handled, so every mail is answered exactly once
