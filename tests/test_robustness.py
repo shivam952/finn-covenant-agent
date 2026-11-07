@@ -179,3 +179,50 @@ def test_carve_out_is_subtracted_only_from_cells_that_contain_it(include_carved_
     for res in evaluate_contract(cc, adjusted, plan):
         assert res.numerator_value == pytest.approx(exp[res.covenant_name]["numerator"])
         assert res.value_reported == pytest.approx(exp[res.covenant_name]["value_reported"])
+
+
+def test_grouped_empty_lines_and_no_double_quote_mark() -> None:
+    from finn.mapping import _mapping_warnings
+    from finn.models import Source
+    from finn.notices import render_notice
+    from finn.report import _source_line
+
+    plan = read_plan(SAMPLE_XLSX)
+    cc, mappings = _carve_out_variant(False)
+    adjusted, carve_notes = apply_carve_outs(cc, mappings, plan)
+    emptied = {(n["params"]["quantity"], n["params"]["component"]) for n in carve_notes}
+    extra = [m.model_copy(update={"item_ids": [], "rationale": "fehlt"}) for m in adjusted[:2]]
+    notes = _mapping_warnings(cc, extra + adjusted, plan, emptied)
+    rendered = [render_notice(n, "de") for n in notes]
+    assert sum("keine Planposition" in r for r in rendered) == 1  # one grouped line
+    assert not any("Gesellschafterdarlehen" in r and "keine Planposition" in r for r in rendered)
+
+    line, _ = _source_line(Source(page=1, section="§ 1", quote="„Begriff“ bezeichnet etwas"), "de")
+    assert "„„" not in line
+
+
+def test_committed_cache_reproduces_answer_key_without_llm(tmp_path: Path) -> None:
+    """The verified cache in the repo answers the sample order with no contract or mapping LLM call."""
+    from finn.pipeline import RunContext, run_check
+
+    cache_dir = REPO_ROOT / "cache"
+    if not list(cache_dir.glob("covenants_*.json")):
+        pytest.skip("no committed cache")
+    files = {json.loads(p.read_text(encoding="utf-8"))["meta"].get("model") for p in cache_dir.glob("covenants_*.json")}
+    model = sorted(m for m in files if m)[0]
+
+    class NoLLM:
+        model_name = model
+
+        def complete_json(self, **_: Any) -> Any:
+            raise AssertionError("cache miss: the LLM was called")
+
+    ctx = RunContext.create(Settings(llm_api_key="x", llm_model=model), llm=NoLLM(), run_id="t")
+    ctx.paths = {"contracts_dir": CONTRACTS_DIR, "cache_dir": cache_dir, "runs_dir": tmp_path}
+    out = run_check(SAMPLE_XLSX, ctx)
+    assert out.report.failed_contracts == []
+    got = {(r.contract_file, r.covenant_name): r for r in out.report.results}
+    for file, exp_c in EXPECTED["contracts"].items():
+        for name, exp in exp_c.get("covenants", {}).items():
+            r = got[(file, name)]
+            assert round(r.value_reported, 4) == pytest.approx(exp["value_reported"]) and r.met is exp["met"]

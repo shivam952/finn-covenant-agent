@@ -171,7 +171,14 @@ def _esc(s: Any) -> str:
 
 def _source_line(src: Source, lang: str) -> tuple[str, bool]:
     texts = _t(lang)["report"]
-    line = str(texts["source_line"]).format(section=src.section, page=src.page, quote=src.quote)
+    template = str(texts["source_line"])
+    # The template wraps the quote in quotation marks; a quote that itself starts with that mark
+    # (a quoted defined term) would otherwise show it twice.
+    opener = template.split("{quote}")[0][-1:]
+    quote = src.quote.strip()
+    if opener and not opener.isspace() and quote.startswith(opener):
+        quote = quote[len(opener):]
+    line = template.format(section=src.section, page=src.page, quote=quote)
     return line, src.verified is not False
 
 

@@ -889,11 +889,7 @@ Ground rules for this step:
 - Copy all command output verbatim from the terminal. If you didn't run a command, don't show output for it.
 - If something fails, STOP and report the exact output.
 
-1. Model settings in .env (the only file you may edit). Set exactly these three values and leave every other line as it is:
-   OPENROUTER_MODEL=google/gemini-3.8-flash
-   OPENROUTER_MODEL_FALLBACK=openai/gpt-5.4-mini
-   LLM_MAX_TOKENS=24000
-   Then show only the variable NAMES that are set in .env.
+1. Model settings (read-only; .env was already updated by hand). Show the variable NAMES set in .env, and the VALUES of only these three: OPENROUTER_MODEL, OPENROUTER_MODEL_FALLBACK, LLM_MAX_TOKENS. Expected: google/gemini-3.8-flash, openai/gpt-5.4-mini, 24000. If they differ, STOP and report.
 
 2. Run `pip install -e ".[dev]"`, delete every cache/*.json (keep cache/.gitkeep), then run `pytest -q`. Expected: 108 passed.
 
@@ -910,6 +906,37 @@ Ground rules for this step:
 
 7. End with a table "step | result | notes".
 Do not run `finn watch` and do not send any email.
+```
+
+**Review notes:**
+- First attempt stopped at step 1: the `.env` that had been edited by hand was the one in the parent FINN folder, which nothing reads. The IDE updated the repo's `.env`, then continued.
+- Result: 108 passed; **all 4 covenants ✓** (34.32 % / 1.56 / 30.7 % / 3.37), contract 1 correctly without covenants. Every extraction used `gemini-3.8-flash` in one attempt, with 34/34 quotes verified on their pages and nothing normalised away. First run 344 s; cached run 0.1 s for the pipeline (21 s including the two small LLM calls). The bad-input emails gave the expected decisions and exit codes. Committed as `ac33934`; no secrets staged.
+- The step 8b carve-out rule was what made contract 4 come out right this time: the model listed the subordinated shareholder loan as a carve-out *and* mapped the bank-loan line, which already leaves it out. Code refused to subtract it twice and said so in the reply.
+- Reply email checked as a rendered page; it looks right. Three small things fixed in step 8d: the same carve-out also produced a contradictory "no plan line" note; six "no plan line" notes for one contract were too noisy; quoted defined terms showed a double opening quotation mark („„).
+
+---
+
+## Step 8d – Reply polish and cache robustness (built directly by the assistant)
+
+Not a prompt: written and tested directly in the assistant's workspace, then copied into the repository.
+
+- A carve-out that code emptied gets only its own notice, not an extra "no plan line" note.
+- Several "no plan line" notes for one contract become one line listing the items; their reasons stay in the audit file. A single one keeps its reason.
+- A quote that starts with a quotation mark no longer gets a second one from the reply template.
+- Cache keys normalise line endings in the prompt files, so a Windows checkout (CRLF) still finds the committed cache. Existing cache keys are unchanged.
+- New test: the committed cache reproduces the answer key with no contract or mapping LLM call. The laptop's cache was replayed this way in the assistant's workspace: same 4 results, no LLM call. 110 tests pass.
+
+---
+
+## Prompt 8e – Pick up step 8d and commit
+
+```text
+Step 8e of Finn. Files on disk were updated outside this editor.
+Rules: close all open editor tabs WITHOUT saving first. Do not edit any file. Do not run git checkout, git restore, git stash or git reset. Never print .env or any key. Copy all output verbatim; if something fails, STOP and report it.
+
+1. Run `pytest -q`. Expected: 110 passed.
+2. Run `finn run --eml data/samples/order.eml --compare-expected` (it must use the committed cache; expected: ✓ for all 4 covenants, done in well under a minute). Show the complete "Hinweise / Warnungen" block and the comparison block.
+3. `git add -A`, show `git status --short` (.env and runs/*.json must not appear), commit with the message "Step 8d: reply notes grouped, carve-out note deduplicated, quote marks, CRLF-safe cache keys", and show `git log --oneline -3`.
 ```
 
 **Review notes:** _(filled in after review)_

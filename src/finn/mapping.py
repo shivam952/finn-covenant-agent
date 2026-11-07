@@ -79,7 +79,8 @@ def _compute_mapping_cache_key(
 ) -> str:
     c_hash = hashlib.sha256(_contract_canonical_json(contract).encode("utf-8")).hexdigest()
     cat_hash = hashlib.sha256(catalog_no_values.encode("utf-8")).hexdigest()
-    p_hash = hashlib.sha256(prompt_bytes).hexdigest()
+    # Line endings are normalised so a Windows checkout (CRLF) still hits the committed cache.
+    p_hash = hashlib.sha256(prompt_bytes.replace(b"\r\n", b"\n")).hexdigest()
     combined = f"{c_hash}:{cat_hash}:{p_hash}:{model_name}"
     return hashlib.sha256(combined.encode("utf-8")).hexdigest()
 
@@ -203,6 +204,7 @@ def _mapping_warnings(
     contract: ContractCovenants,
     mappings: list[TermMapping],
     plan: PlanData,
+    skip: set[tuple[str, str]] | None = None,
 ) -> list[dict[str, Any]]:
     """Non-fatal remarks on a mapping, as language-neutral notices."""
     warnings: list[dict[str, Any]] = []
@@ -256,11 +258,17 @@ def _mapping_warnings(
                             warnings.append(notice("flow_cell_in_stichtag_covenant", covenant=cov.name,
                                                    component=comp.name, cell=cid))
 
-    # 3. Every component set to "no plan line" is shown to the reader with its reason.
-    for m in mappings:
-        if not m.item_ids:
-            warnings.append(notice("empty_plan_line", component=m.component, quantity=m.quantity,
-                                   rationale=m.rationale.strip()))
+    # 3. Every component set to "no plan line" is shown to the reader: one with its reason, several
+    #    as one list (their reasons stay in the audit file). Carve-outs emptied by code already
+    #    have their own notice.
+    empty = [m for m in mappings if not m.item_ids and (m.quantity, m.component) not in (skip or set())]
+    if len(empty) == 1:
+        m = empty[0]
+        warnings.append(notice("empty_plan_line", component=m.component, quantity=m.quantity,
+                               rationale=m.rationale.strip()))
+    elif empty:
+        warnings.append(notice("empty_plan_lines",
+                               items=", ".join(f"„{m.component}“ ({m.quantity})" for m in empty)))
 
     return warnings
 
@@ -305,6 +313,10 @@ def _cells_with_sign(
             if m is not None:
                 cells.update(m.item_ids)
     return cells
+
+
+def _carved(carve_notes: list[dict[str, Any]]) -> set[tuple[str, str]]:
+    return {(n["params"]["quantity"], n["params"]["component"]) for n in carve_notes}
 
 
 def apply_carve_outs(
@@ -380,7 +392,7 @@ def map_terms(
         cached_meta["cache_hit"] = True
         cached_meta["cache_file"] = str(cache_file)
         adjusted, carve_notes = apply_carve_outs(contract, cached_mappings, plan)
-        cached_meta["warnings"] = carve_notes + _mapping_warnings(contract, adjusted, plan)
+        cached_meta["warnings"] = carve_notes + _mapping_warnings(contract, adjusted, plan, _carved(carve_notes))
         return adjusted, cached_meta
 
     base_user_msg = _build_mapping_user_message(contract, leaves, catalog_no_values)
@@ -445,7 +457,7 @@ def map_terms(
 
     raw_mappings = term_mappings
     term_mappings, carve_notes = apply_carve_outs(contract, raw_mappings, plan)
-    warnings = carve_notes + _mapping_warnings(contract, term_mappings, plan)
+    warnings = carve_notes + _mapping_warnings(contract, term_mappings, plan, _carved(carve_notes))
     meta: dict[str, Any] = {
         "purpose": f"map_terms:{contract.contract_file}",
         "model": final_model,

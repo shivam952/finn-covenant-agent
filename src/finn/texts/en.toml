@@ -107,6 +107,7 @@ limit_not_in_quote = "⚠ The limit of {covenant} does not appear in the quoted 
 percent_limit_out_of_range = "Limit of {covenant} ({limit} %) is outside 0–100 %."
 weight_out_of_range = "Weight {weight} for “{component}” ({quantity}) is outside 0–1."
 carve_out_not_contained = "“{component}” ({quantity}) is not contained in the chosen plan lines – {cells} is not subtracted again."
+empty_plan_lines = "These contract items have no plan line and are set to 0: {items}. The reasons are in the audit file."
 empty_plan_line = "There is no plan line for “{component}” ({quantity}) – set to 0. Reason: {rationale}"
 opposite_signs = "Cell {cell} is used with opposite signs in “{quantity}”."
 flow_cell_in_stichtag_covenant = "{covenant} is a balance-date ratio, but “{component}” uses the period figure {cell}."

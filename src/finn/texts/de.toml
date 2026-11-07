@@ -107,6 +107,7 @@ limit_not_in_quote = "⚠ Grenzwert von {covenant} ist nicht im zitierten Vertra
 percent_limit_out_of_range = "Grenzwert von {covenant} ({limit} %) liegt außerhalb von 0–100 %."
 weight_out_of_range = "Gewichtung {weight} für „{component}“ ({quantity}) liegt außerhalb von 0–1."
 carve_out_not_contained = "„{component}“ ({quantity}) ist in den gewählten Planpositionen nicht enthalten – kein zusätzlicher Abzug von {cells}."
+empty_plan_lines = "Für diese Vertragsbestandteile gibt es keine Planposition, sie sind mit 0 angesetzt: {items}. Die Begründungen stehen im Prüfprotokoll."
 empty_plan_line = "Für „{component}“ ({quantity}) gibt es keine Planposition – mit 0 angesetzt. Begründung: {rationale}"
 opposite_signs = "Zelle {cell} wird in „{quantity}“ mit entgegengesetzten Vorzeichen verwendet."
 flow_cell_in_stichtag_covenant = "{covenant} ist eine Stichtagskennzahl, „{component}“ verwendet aber die Periodengröße {cell}."

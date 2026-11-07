@@ -30,7 +30,8 @@ def _compute_cache_key(
     prompt_version: str,
 ) -> str:
     pdf_hash = file_sha256(pdf_path)
-    prompt_hash = hashlib.sha256(prompt_bytes).hexdigest()
+    # Line endings are normalised so a Windows checkout (CRLF) still hits the committed cache.
+    prompt_hash = hashlib.sha256(prompt_bytes.replace(b"\r\n", b"\n")).hexdigest()
     combined = f"{pdf_hash}:{prompt_hash}:{model_name}:{prompt_version}"
     return hashlib.sha256(combined.encode("utf-8")).hexdigest()
 

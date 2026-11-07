@@ -31,7 +31,7 @@ Fill in `.env`:
 Then:
 
 ```bash
-pytest                                                          # 108 tests, no network needed
+pytest                                                          # 110 tests, no network needed
 finn run --eml data/samples/order.eml --compare-expected --preview   # offline run, opens the reply
 finn watch                                                      # live: answer emails to Finn's inbox
 ```
