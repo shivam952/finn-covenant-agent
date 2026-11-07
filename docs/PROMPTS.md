@@ -992,4 +992,25 @@ Rules: close all open editor tabs WITHOUT saving first. Do not edit any file. Do
 3. `git add -A`, show `git status --short` (.env and runs/ must not appear), commit with the message "Step 9b: thank-you mails are recorded, not answered; Gmail spam filter in README", and show `git log --oneline -3`.
 ```
 
+**Review notes:** 112 passed. A new "Danke!" in the thread was logged as `ignored ... (acknowledgement without a request)` and nobody got a reply. Committed as `69b95c8`. The live mail flow is verified end to end.
+
+---
+
+## Prompt 10 – Push to a private GitHub repository
+
+```text
+Step 10 of Finn: publish the repository privately on GitHub. Do not edit any file. Do not run git checkout, git restore, git stash or git reset. Never print .env, any key or password. Copy all output verbatim; if something fails, STOP and report it.
+
+1. Run `gh --version` and `gh auth status`. If gh is missing or not logged in, STOP and tell me (I will run `gh auth login` myself).
+2. Final checks before anything leaves this machine:
+   - `pytest -q` (expected: 112 passed) and `git status --short` (expected: empty).
+   - `git ls-files` must NOT contain .env or anything under runs/ except runs/.gitkeep. Report found/not found.
+   - Search all tracked files for "sk-or-v1" and for the values of MAIL_APP_PASSWORD and OPENROUTER_API_KEY from .env, without printing them. Report found/not found for each. If anything is found, STOP.
+3. Create the private repository and push: `gh repo create finn-covenant-agent --private --source . --remote origin --push`. Show the output and the repository URL.
+4. Give read access to the reviewers: for each GitHub username in REVIEWERS below, run `gh api -X PUT repos/{owner}/finn-covenant-agent/collaborators/<username> -f permission=pull` and show the result (an invitation is sent).
+   REVIEWERS: <fill in>
+5. Show `git log --oneline -3`, `git remote -v` and `gh repo view --json name,visibility,url`.
+End with a table "step | result | notes".
+```
+
 **Review notes:** _(filled in after review)_

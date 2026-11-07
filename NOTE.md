@@ -43,8 +43,12 @@
   reviewed and re-run independently. The reviews found real bugs: a `.env` comment read as the
   model name, worst-case LLM latency over 10 minutes, a hardcoded year and sheet names, and a
   golden fixture missing a contract line.
-- **Steps 4b–6:** written directly by Claude in its own workspace while I was away from the IDE.
-  They are marked as such in TIMELOG.md.
+- **Steps 4b–9b:** written directly by Claude in its own workspace (first while I was away from
+  the IDE, then for the fixes found in the live runs), copied into the repo and re-verified on my
+  laptop. They are marked as such in TIMELOG.md and docs/PROMPTS.md.
+- **Live runs found real problems:** the cheaper fallback model double-subtracted an excluded loan
+  and mixed up a ratio's numerator and denominator. Code now catches both; with the measured model
+  all four covenants match the answer key, and the live Gmail test answered in the same thread.
 - **Model choice, measured against the golden specs:** `gemini-3.8-flash` got 35/35 quotes
   verified and every covenant decision right. `gpt-5.4-mini` is the fallback; its endpoints
   rejected the strict-schema flag, so the client retries without it.
